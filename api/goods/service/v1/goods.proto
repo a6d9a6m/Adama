@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package api.goods.service.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/littleSand/adama/api/goods/service/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.goods.service.v1";
+
+service Goods {
+    rpc CreateGoods (CreateGoodsRequest) returns (CreateGoodsReply);
+    rpc UpdateGoods (UpdateGoodsRequest) returns (UpdateGoodsReply);
+    rpc DeleteGoods (DeleteGoodsRequest) returns (DeleteGoodsReply);
+    rpc GetGoods (GetGoodsRequest) returns (GetGoodsReply) {
+        option (google.api.http) = {
+            get: "/goods/{id}",
+        };
+    }
+    rpc ListGoods (ListGoodsRequest) returns (ListGoodsReply);
+
+
+    rpc GetOrders (GetOrdersRequest) returns (GetOrdersReply) {
+        option (google.api.http) = {
+            get: "/orders/{id}",
+        };
+    }
+    rpc CreateOrders (CreateOrdersRequest) returns (CreateOrdersReply) {
+        option (google.api.http) = {
+            post: "/orders",
+            body: "*"
+        };
+    }
+
+    // 分布式事�?tcc-try
+    rpc CreateOrdersTccTry(CreateOrdersRequest) returns (CreateOrdersReply) {
+        option (google.api.http) = {
+            post: "/ordersTry",
+            body: "*"
+        };
+    }
+
+    // 分布式事�?tcc-confirm
+    rpc CreateOrdersConfirm (CreateOrdersRequest) returns (CreateOrdersReply) {
+        option (google.api.http) = {
+            post: "/ordersConfirm",
+            body: "*"
+        };
+    }
+
+    // 分布式事�?tcc-cancel
+    rpc CreateOrdersTccCancel(CreateOrdersRequest) returns (CreateOrdersReply) {
+        option (google.api.http) = {
+            post: "/ordersCancel",
+            body: "*"
+        };
+    }
+    
+    rpc UpdateOrders (UpdateOrdersRequest) returns (UpdateOrdersReply);
+    rpc DeleteOrders (DeleteOrdersRequest) returns (DeleteOrdersReply);
+    rpc ListOrders (ListOrdersRequest) returns (ListOrdersReply);
+}
+
+message CreateGoodsRequest {}
+message CreateGoodsReply {}
+
+message UpdateGoodsRequest {}
+message UpdateGoodsReply {}
+
+message DeleteGoodsRequest {}
+message DeleteGoodsReply {}
+
+message GetGoodsRequest {
+    int64 id = 1;
+}
+message GetGoodsReply {
+    int64 id = 1;
+    string title = 2;
+    string intro = 3;
+}
+
+message ListGoodsRequest {}
+message ListGoodsReply {}
+
+message GetOrdersRequest {
+    int64 id = 1;
+}
+message GetOrdersReply {
+    string sn = 1;
+}
+
+message CreateOrdersRequest {
+    string sn = 1;
+}
+message CreateOrdersReply {
+    string dtm_result = 1;
+}
+
+message UpdateOrdersRequest {}
+message UpdateOrdersReply {}
+
+message DeleteOrdersRequest {}
+message DeleteOrdersReply {}
+
+message ListOrdersRequest {}
+message ListOrdersReply {}
+
