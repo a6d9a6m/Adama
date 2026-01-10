@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package api.order.service.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/littleSand/adama/api/order/service/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.order.service.v1";
+
+service Order {
+    rpc CreateOrder (CreateOrderRequest) returns (CreateOrderReply) {
+        option (google.api.http) = {
+            post: "/order"
+            body: "*"
+        };
+    }
+    rpc CreateAdamaOrder (CreateAdamaOrderRequest) returns (CreateAdamaOrderReply) {
+        option (google.api.http) = {
+            post: "/adama/order"
+            body: "*"
+        };
+    }
+    rpc CreateAdamaOrderTry (CreateAdamaOrderRequest) returns (CreateAdamaOrderReply) {
+        option (google.api.http) = {
+            post: "/adama/orderTry"
+            body: "*"
+        };
+    }
+    rpc CreateAdamaOrderConfirm (CreateAdamaOrderRequest) returns (CreateAdamaOrderReply) {
+        option (google.api.http) = {
+            post: "/adama/orderConfirm"
+            body: "*"
+        };
+    }
+    rpc CreateAdamaOrderCancel (CreateAdamaOrderRequest) returns (CreateAdamaOrderReply) {
+        option (google.api.http) = {
+            post: "/adama/orderCancel"
+            body: "*"
+        };
+    }
+
+    rpc UpdateOrder (UpdateOrderRequest) returns (UpdateOrderReply);
+    rpc DeleteOrder (DeleteOrderRequest) returns (DeleteOrderReply);
+    rpc GetOrder (GetOrderRequest) returns (GetOrderReply);
+    rpc ListOrder (ListOrderRequest) returns (ListOrderReply);
+}
+
+message CreateOrderRequest {
+    int64 gid = 1;
+    int64 amount = 2;
+}
+message CreateOrderReply {}
+
+message CreateAdamaOrderRequest {
+    int64 gid = 1;
+    int64 amount = 2;
+}
+message CreateAdamaOrderReply {
+    string dtm_result = 1;
+}
+
+message UpdateOrderRequest {}
+message UpdateOrderReply {}
+
+message DeleteOrderRequest {}
+message DeleteOrderReply {}
+
+message GetOrderRequest {}
+message GetOrderReply {}
+
+message ListOrderRequest {}
+message ListOrderReply {}

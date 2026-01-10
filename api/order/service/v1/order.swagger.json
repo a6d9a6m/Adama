@@ -1,0 +1,261 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "v1sorder.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Order"
+    }
+  ],
+  "consumes": [
+    "applicationsjson"
+  ],
+  "produces": [
+    "applicationsjson"
+  ],
+  "paths": {
+    "sorder": {
+      "post": {
+        "operationId": "Order_CreateOrder",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateOrderReply"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#sdefinitionssrpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateOrderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Order"
+        ]
+      }
+    },
+    "sadamasorder": {
+      "post": {
+        "operationId": "Order_CreateAdamaOrder",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderReply"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#sdefinitionssrpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Order"
+        ]
+      }
+    },
+    "sadamasorderCancel": {
+      "post": {
+        "operationId": "Order_CreateAdamaOrderCancel",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderReply"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#sdefinitionssrpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Order"
+        ]
+      }
+    },
+    "sadamasorderConfirm": {
+      "post": {
+        "operationId": "Order_CreateAdamaOrderConfirm",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderReply"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#sdefinitionssrpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Order"
+        ]
+      }
+    },
+    "sadamasorderTry": {
+      "post": {
+        "operationId": "Order_CreateAdamaOrderTry",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderReply"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#sdefinitionssrpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#sdefinitionssv1CreateAdamaOrderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Order"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "type_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#sdefinitionssprotobufAny"
+          }
+        }
+      }
+    },
+    "v1CreateOrderReply": {
+      "type": "object"
+    },
+    "v1CreateOrderRequest": {
+      "type": "object",
+      "properties": {
+        "gid": {
+          "type": "string",
+          "format": "int64"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1CreateAdamaOrderReply": {
+      "type": "object",
+      "properties": {
+        "dtm_result": {
+          "type": "string"
+        }
+      }
+    },
+    "v1CreateAdamaOrderRequest": {
+      "type": "object",
+      "properties": {
+        "gid": {
+          "type": "string",
+          "format": "int64"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1DeleteOrderReply": {
+      "type": "object"
+    },
+    "v1GetOrderReply": {
+      "type": "object"
+    },
+    "v1ListOrderReply": {
+      "type": "object"
+    },
+    "v1UpdateOrderReply": {
+      "type": "object"
+    }
+  }
+}
