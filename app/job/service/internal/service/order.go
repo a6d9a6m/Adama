@@ -1,0 +1,34 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/littleSand/adama/app/job/service/internal/biz"
+)
+
+// OrderService is an order service.
+type OrderService struct {
+	oc *biz.OrderQueueUsecase
+}
+
+func (s *OrderService) Create(ctx context.Context, m *biz.AdamaOrder) {
+	fmt.Println("service - create")
+	if _, err := s.oc.Create(ctx, m); err != nil {
+		fmt.Printf("create order failed: %v\n", err)
+	}
+}
+
+// NewOrderService creates an order service.
+func NewOrderService(oc *biz.OrderQueueUsecase) *OrderService {
+	return &OrderService{oc: oc}
+}
+
+func (s *OrderService) RepairPending(ctx context.Context, limit int) (int, error) {
+	return s.oc.RepairPending(ctx, limit)
+}
+
+func (s *OrderService) CloseExpired(ctx context.Context, now time.Time, limit int) (int, error) {
+	return s.oc.CloseExpired(ctx, now, limit)
+}
