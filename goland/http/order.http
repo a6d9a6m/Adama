@@ -1,0 +1,17 @@
+
+
+###
+POST {{host}}/order
+Content-Type: application/json
+
+{
+  "gid": 1,
+  "amount": 2
+}
+
+###
+
+POST {{host}}/adama/order
+Content-Type: application/json
+
+{"gid":33}

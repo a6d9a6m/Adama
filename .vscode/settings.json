@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+  "go.formatTool": "gofmt",
+  "files.exclude": {
+    "**/*.bak": true
+  }
+}
