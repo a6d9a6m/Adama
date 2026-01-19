@@ -1,0 +1,15 @@
+server:
+  http:
+    addr: 0.0.0.0:8080
+    timeout: 3s
+
+upstreams:
+  user:
+    base_url: http://127.0.0.1:8000
+    timeout: 2s
+  goods:
+    base_url: http://127.0.0.1:8003
+    timeout: 2s
+  order:
+    base_url: http://127.0.0.1:8001
+    timeout: 2s
