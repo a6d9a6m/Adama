@@ -5,17 +5,19 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/errors"
+	rr "github.com/go-resty/resty/v2"
 	pb "github.com/littleSand/adama/api/order/service/v1"
 	"github.com/littleSand/adama/app/order/service/internal/biz"
+	"github.com/littleSand/adama/pkg/requestctx"
 	"github.com/littleSand/adama/pkg/seckill"
 	"github.com/yedf/dtmcli"
-	rr "github.com/go-resty/resty/v2"
 )
 
 func (s *OrderService) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*pb.CreateOrderReply, error) {
 	s.log.Infof("CreateOrder request: gid=%d amount=%d", req.Gid, req.Amount)
 
 	order := &biz.Order{
+		Uid:    userIDFromContext(ctx, 333),
 		Gid:    req.Gid,
 		Amount: req.Amount,
 	}
@@ -36,8 +38,13 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 		amount = 1
 	}
 
+	userID, ok := requestctx.UserID(ctx)
+	if !ok || userID <= 0 {
+		userID = 88
+	}
+
 	order := &biz.AdamaOrder{
-		UserId:  88,
+		UserId:  userID,
 		GoodsId: req.Gid,
 		Amount:  amount,
 	}
@@ -146,4 +153,12 @@ func (s *OrderService) runAdamaTCC(ctx context.Context, order *biz.AdamaOrder) e
 		}
 		return tcc.CallBranch(req, orderSvcURL+"/adama/tcc/order/try", orderSvcURL+"/adama/tcc/order/confirm", orderSvcURL+"/adama/tcc/order/cancel")
 	})
+}
+
+func userIDFromContext(ctx context.Context, fallback int64) int64 {
+	userID, ok := requestctx.UserID(ctx)
+	if !ok || userID <= 0 {
+		return fallback
+	}
+	return userID
 }

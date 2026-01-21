@@ -10,7 +10,7 @@ var _ biz.OrderRepo = (*orderRepo)(nil)
 
 type orderRepo struct {
 	data *Data
-	log *log.Helper
+	log  *log.Helper
 }
 
 func NewOrderRepo(data *Data, logger log.Logger) biz.OrderRepo {
@@ -22,7 +22,7 @@ func NewOrderRepo(data *Data, logger log.Logger) biz.OrderRepo {
 
 func (o orderRepo) CreateOrder(ctx context.Context, order *biz.Order) error {
 
-	res, err := o.data.db.Order.Create().SetGid(order.Gid).SetSn("2222").SetUID(333).Save(ctx)
+	res, err := o.data.db.Order.Create().SetGid(order.Gid).SetSn("2222").SetUID(order.Uid).Save(ctx)
 
 	if err != nil {
 		return err

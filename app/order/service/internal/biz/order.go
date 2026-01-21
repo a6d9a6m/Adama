@@ -6,9 +6,10 @@ import (
 )
 
 type Order struct {
-	Gid int64
+	Uid    int64
+	Gid    int64
 	Amount int64
-	Sn string
+	Sn     string
 }
 
 type OrderRepo interface {
@@ -17,7 +18,7 @@ type OrderRepo interface {
 
 type OrderUsecase struct {
 	repo OrderRepo
-	log *log.Helper
+	log  *log.Helper
 }
 
 func NewOrderUsecase(repo OrderRepo, logger log.Logger) *OrderUsecase {
@@ -34,7 +35,7 @@ type OrderQueueRepo interface {
 
 type OrderQueueUsecase struct {
 	repo OrderQueueRepo
-	log *log.Helper
+	log  *log.Helper
 }
 
 func NewOrderQueueUsecase(repo OrderQueueRepo, logger log.Logger) *OrderQueueUsecase {
@@ -52,7 +53,7 @@ type OrderQueueReceiverRepo interface {
 
 type OrderQueueReceiverUsecase struct {
 	repo OrderQueueReceiverRepo
-	log *log.Helper
+	log  *log.Helper
 }
 
 func NewOrderQueueReceiverUsecase(repo OrderQueueReceiverRepo, logger log.Logger) *OrderQueueReceiverUsecase {

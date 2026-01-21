@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
-	gwmiddleware "github.com/littleSand/adama/app/gateway/internal/middleware"
+	"github.com/littleSand/adama/pkg/requestctx"
 )
 
 const gatewayPrefix = "/api/v1"
@@ -110,10 +110,10 @@ func (d *Dispatcher) ServeHTTP(writer http.ResponseWriter, request *http.Request
 	}
 
 	forwardRequest := cloneRequest(request, target, path)
-	requestID, traceID := gwmiddleware.EnsureForwardHeaders(forwardRequest)
+	requestID, traceID := requestctx.EnsureHeaders(forwardRequest, gatewayPrefix)
 
-	writer.Header().Set(gwmiddleware.HeaderRequestID, requestID)
-	writer.Header().Set(gwmiddleware.HeaderTraceID, traceID)
+	writer.Header().Set(requestctx.HeaderRequestID, requestID)
+	writer.Header().Set(requestctx.HeaderTraceID, traceID)
 
 	d.log.Infof("gateway proxy target=%s method=%s path=%s trace_id=%s", target.name, request.Method, path, traceID)
 	target.proxy.ServeHTTP(writer, forwardRequest)
