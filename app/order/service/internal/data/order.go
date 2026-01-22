@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/littleSand/adama/app/order/service/internal/biz"
+	"github.com/littleSand/adama/app/order/service/internal/data/ent"
+	entorder "github.com/littleSand/adama/app/order/service/internal/data/ent/order"
 )
 
 var _ biz.OrderRepo = (*orderRepo)(nil)
@@ -30,4 +32,37 @@ func (o orderRepo) CreateOrder(ctx context.Context, order *biz.Order) error {
 
 	o.log.Infof("order-create-result: %v", res)
 	return nil
+}
+
+func (o orderRepo) ListOrders(ctx context.Context, userID int64, page int, pageSize int) ([]biz.Order, int64, error) {
+	builder := o.data.db.Order.Query()
+	if userID > 0 {
+		builder = builder.Where(entorder.UIDEQ(userID))
+	}
+
+	total, err := builder.Count(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := builder.
+		Order(ent.Asc(entorder.FieldID)).
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		All(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	items := make([]biz.Order, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, biz.Order{
+			Id:  row.ID,
+			Uid: row.UID,
+			Gid: row.Gid,
+			Sn:  row.Sn,
+		})
+	}
+
+	return items, int64(total), nil
 }

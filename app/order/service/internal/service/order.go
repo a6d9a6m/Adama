@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	stdhttp "net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-kratos/kratos/v2/errors"
+	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	rr "github.com/go-resty/resty/v2"
 	pb "github.com/littleSand/adama/api/order/service/v1"
 	"github.com/littleSand/adama/app/order/service/internal/biz"
@@ -155,10 +158,44 @@ func (s *OrderService) runAdamaTCC(ctx context.Context, order *biz.AdamaOrder) e
 	})
 }
 
+func (s *OrderService) ListOrdersHTTP(ctx khttp.Context) error {
+	page := orderIntQuery(ctx.Request(), "page", 1)
+	pageSize := orderIntQuery(ctx.Request(), "page_size", 10)
+
+	userID, ok := requestctx.UserID(ctx)
+	if !ok || userID <= 0 {
+		userID = int64(orderIntQuery(ctx.Request(), "user_id", 0))
+	}
+
+	items, total, err := s.uc.List(ctx, userID, page, pageSize)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(stdhttp.StatusOK, map[string]interface{}{
+		"items": items,
+		"page":  page,
+		"size":  pageSize,
+		"total": total,
+	})
+}
+
 func userIDFromContext(ctx context.Context, fallback int64) int64 {
 	userID, ok := requestctx.UserID(ctx)
 	if !ok || userID <= 0 {
 		return fallback
 	}
 	return userID
+}
+
+func orderIntQuery(req *stdhttp.Request, key string, defaultValue int) int {
+	raw := req.URL.Query().Get(key)
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return defaultValue
+	}
+	return value
 }

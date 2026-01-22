@@ -1,9 +1,6 @@
 package server
 
 import (
-	pb "github.com/littleSand/adama/api/user/service/v1"
-	"github.com/littleSand/adama/app/user/service/internal/conf"
-	"github.com/littleSand/adama/app/user/service/internal/service"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware/logging"
 	"github.com/go-kratos/kratos/v2/middleware/metrics"
@@ -11,6 +8,9 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware/tracing"
 	"github.com/go-kratos/kratos/v2/middleware/validate"
 	"github.com/go-kratos/kratos/v2/transport/http"
+	pb "github.com/littleSand/adama/api/user/service/v1"
+	"github.com/littleSand/adama/app/user/service/internal/conf"
+	"github.com/littleSand/adama/app/user/service/internal/service"
 )
 
 // NewHTTPServer new a HTTP server.
@@ -35,6 +35,15 @@ func NewHTTPServer(c *conf.Server, s *service.UserService, logger log.Logger) *h
 	}
 	srv := http.NewServer(opts...)
 	pb.RegisterUserHTTPServer(srv, s)
+	registerUserRoutes(srv, s)
 	return srv
 }
 
+func registerUserRoutes(srv *http.Server, s *service.UserService) {
+	router := srv.Route("/")
+	router.GET("/user/address/list", s.ListAddressesHTTP)
+	router.POST("/user/address", s.CreateAddressHTTP)
+	router.PUT("/user/address/{id}", s.UpdateAddressHTTP)
+	router.DELETE("/user/address/{id}", s.DeleteAddressHTTP)
+	router.PUT("/user/address/{id}/default", s.SetDefaultAddressHTTP)
+}

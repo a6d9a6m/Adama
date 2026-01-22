@@ -2,6 +2,8 @@ package data
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-redis/redis/extra/redisotel"
 	"github.com/go-redis/redis/v8"
@@ -19,7 +21,8 @@ var ProviderSet = wire.NewSet(NewData, NewUserRepo)
 type Data struct {
 	// TODO warpped database client
 	//db *ent.Client
-	db *ent.Client
+	db  *ent.Client
+	sql *sql.DB
 
 	rdb *redis.Client
 }
@@ -42,6 +45,10 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 		return nil, nil, err
 	}
 
+	sqlDB, err := sql.Open("mysql", conf.Database.Source)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// redis
 	rdb := redis.NewClient(&redis.Options{
@@ -53,10 +60,13 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 	})
 	rdb.AddHook(redisotel.TracingHook{})
 
-
 	d := &Data{
-		db: client,
+		db:  client,
+		sql: sqlDB,
 		rdb: rdb,
+	}
+	if err := ensureUserAddressSchema(d.sql); err != nil {
+		return nil, nil, err
 	}
 	return d, func() {
 		if err := d.db.Close(); err != nil {
@@ -65,3 +75,22 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 	}, nil
 }
 
+func ensureUserAddressSchema(db *sql.DB) error {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS user_addresses (
+		id BIGINT PRIMARY KEY AUTO_INCREMENT,
+		user_id BIGINT NOT NULL,
+		consignee VARCHAR(64) NOT NULL,
+		phone VARCHAR(32) NOT NULL DEFAULT '',
+		province VARCHAR(64) NOT NULL DEFAULT '',
+		city VARCHAR(64) NOT NULL DEFAULT '',
+		detail VARCHAR(255) NOT NULL DEFAULT '',
+		is_default TINYINT(1) NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		INDEX idx_user_id(user_id)
+	)`)
+	if err != nil {
+		return fmt.Errorf("ensure user address schema: %w", err)
+	}
+	return nil
+}

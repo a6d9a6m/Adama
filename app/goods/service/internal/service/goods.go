@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	stdhttp "net/http"
+	"strconv"
 
 	"github.com/go-kratos/kratos/v2/transport"
 	"github.com/go-kratos/kratos/v2/transport/http"
@@ -87,3 +89,36 @@ func (s *GoodsService) CreateOrdersCancel(ctx context.Context, req *pb.CreateOrd
 	}, nil
 }
 
+func (s *GoodsService) ListGoodsHTTP(ctx http.Context) error {
+	page := goodsIntQuery(ctx.Request(), "page", 1)
+	pageSize := goodsIntQuery(ctx.Request(), "page_size", 10)
+	keyword := ctx.Request().URL.Query().Get("keyword")
+
+	result, err := s.uc.List(ctx, biz.GoodsListQuery{
+		Page:     page,
+		PageSize: pageSize,
+		Keyword:  keyword,
+	})
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(stdhttp.StatusOK, map[string]interface{}{
+		"items": result.Items,
+		"page":  result.Page,
+		"size":  result.Size,
+		"total": result.Total,
+	})
+}
+
+func goodsIntQuery(req *stdhttp.Request, key string, defaultValue int) int {
+	raw := req.URL.Query().Get(key)
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}

@@ -6,6 +6,7 @@ import (
 )
 
 type Order struct {
+	Id     int64
 	Uid    int64
 	Gid    int64
 	Amount int64
@@ -14,6 +15,7 @@ type Order struct {
 
 type OrderRepo interface {
 	CreateOrder(ctx context.Context, order *Order) error
+	ListOrders(ctx context.Context, userID int64, page int, pageSize int) ([]Order, int64, error)
 }
 
 type OrderUsecase struct {
@@ -27,6 +29,19 @@ func NewOrderUsecase(repo OrderRepo, logger log.Logger) *OrderUsecase {
 
 func (uc *OrderUsecase) Create(ctx context.Context, order *Order) error {
 	return uc.repo.CreateOrder(ctx, order)
+}
+
+func (uc *OrderUsecase) List(ctx context.Context, userID int64, page int, pageSize int) ([]Order, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	return uc.repo.ListOrders(ctx, userID, page, pageSize)
 }
 
 type OrderQueueRepo interface {

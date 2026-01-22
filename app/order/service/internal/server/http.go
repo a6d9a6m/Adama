@@ -3,9 +3,6 @@ package server
 import (
 	stdhttp "net/http"
 
-	pb "github.com/littleSand/adama/api/order/service/v1"
-	"github.com/littleSand/adama/app/order/service/internal/conf"
-	"github.com/littleSand/adama/app/order/service/internal/service"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware/logging"
 	"github.com/go-kratos/kratos/v2/middleware/metrics"
@@ -13,6 +10,9 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware/tracing"
 	"github.com/go-kratos/kratos/v2/middleware/validate"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	pb "github.com/littleSand/adama/api/order/service/v1"
+	"github.com/littleSand/adama/app/order/service/internal/conf"
+	"github.com/littleSand/adama/app/order/service/internal/service"
 )
 
 // NewHTTPServer new a HTTP server.
@@ -38,6 +38,7 @@ func NewHTTPServer(c *conf.Server, s *service.OrderService, logger log.Logger) *
 	srv := khttp.NewServer(opts...)
 	pb.RegisterOrderHTTPServer(srv, s)
 	registerAdamaTCCRoutes(srv, s)
+	registerOrderRoutes(srv, s)
 	return srv
 }
 
@@ -75,3 +76,7 @@ func registerAdamaTCCRoutes(srv *khttp.Server, s *service.OrderService) {
 	})
 }
 
+func registerOrderRoutes(srv *khttp.Server, s *service.OrderService) {
+	router := srv.Route("/")
+	router.GET("/order/list", s.ListOrdersHTTP)
+}

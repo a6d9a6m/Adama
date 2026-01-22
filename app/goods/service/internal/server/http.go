@@ -37,6 +37,11 @@ func NewHTTPServer(c *conf.Server, s *service.GoodsService, logger log.Logger) *
 	srv := http.NewServer(opts...)
 
 	pb.RegisterGoodsHTTPServer(srv, s)
+	registerGoodsRoutes(srv, s)
 	return srv
 }
 
+func registerGoodsRoutes(srv *http.Server, s *service.GoodsService) {
+	router := srv.Route("/")
+	router.GET("/goods/list", s.ListGoodsHTTP)
+}
