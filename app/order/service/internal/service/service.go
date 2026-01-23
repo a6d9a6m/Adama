@@ -7,26 +7,23 @@ import (
 	"github.com/littleSand/adama/app/order/service/internal/biz"
 )
 
-
-
 // ProviderSet is service providers.
 var ProviderSet = wire.NewSet(NewOrderService)
 
 type OrderService struct {
 	pb.UnimplementedOrderServer
 
-	uc *biz.OrderUsecase
+	uc    *biz.OrderUsecase
 	goods *biz.AdamaGoodsUsecase
-	so *biz.AdamaOrderUsecase
-	log *log.Helper
+	so    *biz.AdamaOrderUsecase
+	log   *log.Helper
 }
 
-func NewOrderService(uc *biz.OrderUsecase, so *biz.AdamaOrderUsecase, goods *biz.AdamaGoodsUsecase, logger log.Logger) *OrderService  {
+func NewOrderService(uc *biz.OrderUsecase, so *biz.AdamaOrderUsecase, goods *biz.AdamaGoodsUsecase, logger log.Logger) *OrderService {
 	return &OrderService{
-		uc: uc,
-		so: so,
+		uc:    uc,
+		so:    so,
 		goods: goods,
-		log: log.NewHelper(logger),
+		log:   log.NewHelper(logger),
 	}
 }
-

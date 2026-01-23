@@ -9,6 +9,7 @@ import (
 	"github.com/bwmarrin/snowflake"
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/google/uuid"
 	"github.com/littleSand/adama/app/order/service/internal/biz"
 	"github.com/littleSand/adama/app/order/service/internal/data/kafka"
 	"github.com/littleSand/adama/pkg/cache"
@@ -163,6 +164,44 @@ func (s adamaOrderRepo) MarkOrderSyncResult(ctx context.Context, orderID int64, 
 		lastError, time.Now(), orderID,
 	)
 	return err
+}
+
+func (s adamaOrderRepo) IssueSeckillToken(ctx context.Context, userID int64, goodsID int64, expireAt time.Time) (string, error) {
+	token := uuid.NewString()
+	ttl := time.Until(expireAt)
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	if err := s.data.rdb.Set(ctx, cache.AdamaOrderTokenKey(userID, goodsID, token), "1", ttl).Err(); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (s adamaOrderRepo) ConsumeSeckillToken(ctx context.Context, userID int64, goodsID int64, token string) error {
+	key := cache.AdamaOrderTokenKey(userID, goodsID, token)
+	deleted, err := s.data.rdb.Del(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+	if deleted == 0 {
+		return errors.New(400, "SECKILL_TOKEN_INVALID", "seckill token invalid or already used")
+	}
+	return nil
+}
+
+func (s adamaOrderRepo) AcquireUserOrderLimit(ctx context.Context, userID int64, goodsID int64, ttl time.Duration) error {
+	if ttl <= 0 {
+		ttl = seckill.DefaultPaymentTTL
+	}
+	ok, err := s.data.rdb.SetNX(ctx, cache.AdamaOrderIdempotencyKey(userID, goodsID), "1", ttl).Result()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New(429, "SECKILL_DUPLICATE_REQUEST", "duplicate seckill request")
+	}
+	return nil
 }
 
 func NewAdamaOrderRepo(data *Data, logger log.Logger) biz.AdamaOrderRepo {

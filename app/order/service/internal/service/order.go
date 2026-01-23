@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	stdhttp "net/http"
 	"strconv"
 	"time"
@@ -15,6 +16,8 @@ import (
 	"github.com/littleSand/adama/pkg/seckill"
 	"github.com/yedf/dtmcli"
 )
+
+const headerSeckillToken = "X-Seckill-Token"
 
 func (s *OrderService) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*pb.CreateOrderReply, error) {
 	s.log.Infof("CreateOrder request: gid=%d amount=%d", req.Gid, req.Amount)
@@ -44,6 +47,16 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 	userID, ok := requestctx.UserID(ctx)
 	if !ok || userID <= 0 {
 		userID = 88
+	}
+	token := requestctx.HeaderValue(ctx, headerSeckillToken)
+	if token == "" {
+		return nil, errors.New(400, "SECKILL_TOKEN_REQUIRED", "seckill token required")
+	}
+	if err := s.so.ConsumeToken(ctx, userID, req.Gid, token); err != nil {
+		return nil, err
+	}
+	if err := s.so.AcquireUserLimit(ctx, userID, req.Gid, seckill.DefaultPaymentTTL); err != nil {
+		return nil, err
 	}
 
 	order := &biz.AdamaOrder{
@@ -198,4 +211,48 @@ func orderIntQuery(req *stdhttp.Request, key string, defaultValue int) int {
 		return defaultValue
 	}
 	return value
+}
+
+func (s *OrderService) GetAdamaGoodsHTTP(ctx khttp.Context) error {
+	goodsID, err := strconv.ParseInt(ctx.Vars().Get("id"), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	userID, ok := requestctx.UserID(ctx)
+	if !ok || userID <= 0 {
+		userID = int64(orderIntQuery(ctx.Request(), "user_id", 0))
+	}
+	if userID <= 0 {
+		return errors.New(401, "USER_CONTEXT_REQUIRED", "user context required")
+	}
+
+	goods, err := s.goods.GetAdamaGoods(ctx, goodsID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	if now.Before(goods.StartDate) {
+		return errors.New(400, "SECKILL_NOT_STARTED", "seckill not started")
+	}
+	if now.After(goods.EndDate) {
+		return errors.New(400, "SECKILL_ENDED", "seckill ended")
+	}
+
+	token, err := s.so.IssueToken(ctx, userID, goodsID, goods.EndDate)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(stdhttp.StatusOK, map[string]interface{}{
+		"goods_id":      goods.GoodsId,
+		"adama_price":   goods.AdamaPrice,
+		"stock_count":   goods.StockCount,
+		"start_date":    goods.StartDate,
+		"end_date":      goods.EndDate,
+		"seckill_token": token,
+		"token_header":  headerSeckillToken,
+		"token_usage":   fmt.Sprintf("set %s on POST /adama/order", headerSeckillToken),
+	})
 }

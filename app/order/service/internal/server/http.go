@@ -79,4 +79,5 @@ func registerAdamaTCCRoutes(srv *khttp.Server, s *service.OrderService) {
 func registerOrderRoutes(srv *khttp.Server, s *service.OrderService) {
 	router := srv.Route("/")
 	router.GET("/order/list", s.ListOrdersHTTP)
+	router.GET("/adama/goods/{id}", s.GetAdamaGoodsHTTP)
 }

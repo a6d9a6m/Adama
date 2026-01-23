@@ -7,12 +7,12 @@ import (
 )
 
 type AdamaOrder struct {
-	UserId    int64
-	OrderId   int64
-	GoodsId   int64
-	Amount    int64
+	UserId     int64
+	OrderId    int64
+	GoodsId    int64
+	Amount     int64
 	StockToken string
-	ExpireAt  time.Time
+	ExpireAt   time.Time
 }
 
 type AdamaOrderRepo interface {
@@ -24,6 +24,9 @@ type AdamaOrderRepo interface {
 	ConfirmAdamaOrder(ctx context.Context, order *AdamaOrder) error
 	CancelAdamaOrder(ctx context.Context, order *AdamaOrder) error
 	MarkOrderSyncResult(ctx context.Context, orderID int64, dispatchErr error) error
+	IssueSeckillToken(ctx context.Context, userID int64, goodsID int64, expireAt time.Time) (string, error)
+	ConsumeSeckillToken(ctx context.Context, userID int64, goodsID int64, token string) error
+	AcquireUserOrderLimit(ctx context.Context, userID int64, goodsID int64, ttl time.Duration) error
 }
 
 type AdamaOrderUsecase struct {
@@ -69,4 +72,16 @@ func (uc *AdamaOrderUsecase) Cancel(ctx context.Context, order *AdamaOrder) erro
 
 func (uc *AdamaOrderUsecase) MarkSyncResult(ctx context.Context, orderID int64, dispatchErr error) error {
 	return uc.repo.MarkOrderSyncResult(ctx, orderID, dispatchErr)
+}
+
+func (uc *AdamaOrderUsecase) IssueToken(ctx context.Context, userID int64, goodsID int64, expireAt time.Time) (string, error) {
+	return uc.repo.IssueSeckillToken(ctx, userID, goodsID, expireAt)
+}
+
+func (uc *AdamaOrderUsecase) ConsumeToken(ctx context.Context, userID int64, goodsID int64, token string) error {
+	return uc.repo.ConsumeSeckillToken(ctx, userID, goodsID, token)
+}
+
+func (uc *AdamaOrderUsecase) AcquireUserLimit(ctx context.Context, userID int64, goodsID int64, ttl time.Duration) error {
+	return uc.repo.AcquireUserOrderLimit(ctx, userID, goodsID, ttl)
 }

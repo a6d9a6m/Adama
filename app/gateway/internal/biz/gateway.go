@@ -19,6 +19,7 @@ func NewGatewayUsecase(data *data.Data, logger log.Logger) *GatewayUsecase {
 			{Prefix: "/user", Upstream: data.User},
 			{Prefix: "/goods", Upstream: data.Goods},
 			{Prefix: "/order", Upstream: data.Order},
+			{Prefix: "/adama/goods", Upstream: data.Order},
 			{Prefix: "/adama/order", Upstream: data.Order},
 		},
 		BlockedExact: []string{
