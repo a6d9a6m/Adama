@@ -1,0 +1,14 @@
+server:
+  http:
+    addr: 0.0.0.0:8088
+    timeout: 10s
+
+data:
+  database:
+    driver: mysql
+    source: root:Root@123456@tcp(192.168.0.111:3307)/order?parseTime=true
+  openai:
+    base_url: https://api.openai.com/v1/responses
+    api_key: ""
+    model: gpt-5-mini
+    timeout: 20s
