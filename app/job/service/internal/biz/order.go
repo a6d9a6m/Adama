@@ -10,6 +10,8 @@ type OrderQueueRepo interface {
 	CreateOrder(ctx context.Context, o *AdamaOrder) (*AdamaOrder, error)
 	RepairPendingOrders(ctx context.Context, limit int) (int, error)
 	CloseExpiredOrders(ctx context.Context, now time.Time, limit int) (int, error)
+	CheckStockConsistency(ctx context.Context, limit int) (int, error)
+	CollectWorkflowStats(ctx context.Context) (map[string]int64, error)
 }
 
 type AdamaOrder struct {
@@ -22,7 +24,7 @@ type AdamaOrder struct {
 
 type OrderQueueUsecase struct {
 	repo OrderQueueRepo
-	log *log.Helper
+	log  *log.Helper
 }
 
 func NewOrderQueueUsecase(repo OrderQueueRepo, logger log.Logger) *OrderQueueUsecase {
@@ -39,4 +41,12 @@ func (uc *OrderQueueUsecase) RepairPending(ctx context.Context, limit int) (int,
 
 func (uc *OrderQueueUsecase) CloseExpired(ctx context.Context, now time.Time, limit int) (int, error) {
 	return uc.repo.CloseExpiredOrders(ctx, now, limit)
+}
+
+func (uc *OrderQueueUsecase) CheckStockConsistency(ctx context.Context, limit int) (int, error) {
+	return uc.repo.CheckStockConsistency(ctx, limit)
+}
+
+func (uc *OrderQueueUsecase) CollectWorkflowStats(ctx context.Context) (map[string]int64, error) {
+	return uc.repo.CollectWorkflowStats(ctx)
 }

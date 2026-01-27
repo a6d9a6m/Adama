@@ -3,11 +3,14 @@ package job
 import (
 	"context"
 	"fmt"
-	"log"
+	stdlog "log"
+	"math/rand"
 	"strconv"
 	"time"
 
+	klog "github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport"
+	"github.com/go-redis/redis/v8"
 	event2 "github.com/littleSand/adama/app/job/service/event"
 	"github.com/littleSand/adama/app/job/service/internal/biz"
 	"github.com/littleSand/adama/app/job/service/internal/conf"
@@ -22,6 +25,15 @@ type Server struct {
 	reader *kafka.Reader
 	topic  string
 	uo     *service.OrderService
+	rdb    *redis.Client
+	log    *klog.Helper
+	tasks  []scheduledTask
+}
+
+type scheduledTask struct {
+	name     string
+	interval time.Duration
+	run      func(context.Context, time.Time) (string, error)
 }
 
 type Message struct {
@@ -70,10 +82,10 @@ func (s Server) Receive(ctx context.Context, handler event2.Handler) error {
 				header: h,
 			})
 			if err != nil {
-				log.Fatal("message handing exception:", err)
+				stdlog.Fatal("message handing exception:", err)
 			}
 			if err := s.reader.CommitMessages(ctx, m); err != nil {
-				log.Fatal("failed to commit message:", err)
+				stdlog.Fatal("failed to commit message:", err)
 			}
 		}
 	}()
@@ -88,7 +100,7 @@ func (s Server) Close() error {
 	return nil
 }
 
-func NewJOBServer(c *conf.Server, uo *service.OrderService) *Server {
+func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, logger klog.Logger) *Server {
 
 	// []string{"192.168.2.27:9092"}, "order"
 
@@ -102,7 +114,53 @@ func NewJOBServer(c *conf.Server, uo *service.OrderService) *Server {
 		MinBytes: 1,    // 10kb
 		MaxBytes: 10e6, // 10mb
 	})
-	return &Server{reader: r, topic: topic, uo: uo}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         data.Redis.Addr,
+		WriteTimeout: data.Redis.WriteTimeout.AsDuration(),
+		ReadTimeout:  data.Redis.ReadTimeout.AsDuration(),
+	})
+	s := &Server{
+		reader: r,
+		topic:  topic,
+		uo:     uo,
+		rdb:    rdb,
+		log:    klog.NewHelper(klog.With(logger, "module", "job/server")),
+	}
+	s.tasks = []scheduledTask{
+		{
+			name:     "order_sync_repair",
+			interval: 5 * time.Second,
+			run: func(ctx context.Context, _ time.Time) (string, error) {
+				repaired, err := s.uo.RepairPending(ctx, 20)
+				return fmt.Sprintf("repaired=%d", repaired), err
+			},
+		},
+		{
+			name:     "order_timeout_close",
+			interval: 5 * time.Second,
+			run: func(ctx context.Context, now time.Time) (string, error) {
+				closed, err := s.uo.CloseExpired(ctx, now, 20)
+				return fmt.Sprintf("closed=%d", closed), err
+			},
+		},
+		{
+			name:     "stock_consistency_check",
+			interval: 10 * time.Second,
+			run: func(ctx context.Context, _ time.Time) (string, error) {
+				mismatches, err := s.uo.CheckStockConsistency(ctx, 20)
+				return fmt.Sprintf("mismatches=%d", mismatches), err
+			},
+		},
+		{
+			name:     "cleanup_stats",
+			interval: 15 * time.Second,
+			run: func(ctx context.Context, _ time.Time) (string, error) {
+				stats, err := s.uo.CollectWorkflowStats(ctx)
+				return fmt.Sprintf("stats=%v", stats), err
+			},
+		},
+	}
+	return s
 }
 
 func (s Server) Start(ctx context.Context) error {
@@ -141,7 +199,9 @@ func (s Server) Start(ctx context.Context) error {
 		return nil
 	})
 
-	go s.runRepairLoop(ctx)
+	for _, task := range s.tasks {
+		go s.runTaskLoop(ctx, task)
+	}
 
 	return nil
 }
@@ -154,8 +214,8 @@ func (s Server) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (s Server) runRepairLoop(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+func (s Server) runTaskLoop(ctx context.Context, task scheduledTask) {
+	ticker := time.NewTicker(task.interval)
 	defer ticker.Stop()
 
 	for {
@@ -163,13 +223,37 @@ func (s Server) runRepairLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			if repaired, err := s.uo.RepairPending(ctx, 20); err == nil && repaired > 0 {
-				fmt.Printf("repaired %d pending workflow(s)\n", repaired)
+			token := fmt.Sprintf("%d-%d", time.Now().UnixNano(), rand.Int63())
+			locked, err := s.acquireTaskLock(ctx, task.name, token, task.interval)
+			if err != nil {
+				s.log.Errorf("task lock failed: task=%s err=%v", task.name, err)
+				continue
 			}
-			if closed, err := s.uo.CloseExpired(ctx, now, 20); err == nil && closed > 0 {
-				fmt.Printf("closed %d expired workflow(s)\n", closed)
+			if !locked {
+				continue
 			}
+			result, runErr := task.run(ctx, now)
+			if runErr != nil {
+				s.log.Errorf("task run failed: task=%s err=%v", task.name, runErr)
+			} else {
+				s.log.Infof("task run finished: task=%s %s", task.name, result)
+			}
+			_ = s.releaseTaskLock(ctx, task.name, token)
 		}
 	}
 }
 
+func (s Server) acquireTaskLock(ctx context.Context, taskName, token string, interval time.Duration) (bool, error) {
+	lockTTL := interval + 2*time.Second
+	return s.rdb.SetNX(ctx, "JOB:TASK:LOCK:"+taskName, token, lockTTL).Result()
+}
+
+func (s Server) releaseTaskLock(ctx context.Context, taskName, token string) error {
+	const script = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+end
+return 0
+`
+	return s.rdb.Eval(ctx, script, []string{"JOB:TASK:LOCK:" + taskName}, token).Err()
+}

@@ -141,6 +141,39 @@ func (o *orderRepo) CloseExpiredOrders(ctx context.Context, now time.Time, limit
 	return closed, nil
 }
 
+func (o *orderRepo) CheckStockConsistency(ctx context.Context, limit int) (int, error) {
+	var workflows []AdamaOrderWorkflow
+	if err := o.data.db.WithContext(ctx).
+		Where("status = ? AND (stock_status <> ? OR cache_status <> ?)", seckill.OrderStatusPendingPay, seckill.StockStatusReserved, seckill.CacheStatusReserved).
+		Order("updated_at ASC").
+		Limit(limit).
+		Find(&workflows).Error; err != nil {
+		return 0, err
+	}
+	return len(workflows), nil
+}
+
+func (o *orderRepo) CollectWorkflowStats(ctx context.Context) (map[string]int64, error) {
+	type statusCount struct {
+		Status string
+		Count  int64
+	}
+	var rows []statusCount
+	if err := o.data.db.WithContext(ctx).
+		Model(&AdamaOrderWorkflow{}).
+		Select("status, count(*) as count").
+		Group("status").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		stats[row.Status] = row.Count
+	}
+	return stats, nil
+}
+
 func (o *orderRepo) closeOneExpired(ctx context.Context, workflow *AdamaOrderWorkflow, now time.Time) error {
 	updates := map[string]interface{}{
 		"status":     seckill.OrderStatusTimeoutClosed,
@@ -175,8 +208,8 @@ func (o *orderRepo) closeOneExpired(ctx context.Context, workflow *AdamaOrderWor
 				Model(&AdamaOrderWorkflow{}).
 				Where("order_id = ?", workflow.OrderID).
 				Updates(map[string]interface{}{
-					"last_error":  err.Error(),
-					"updated_at":  time.Now(),
+					"last_error":   err.Error(),
+					"updated_at":   time.Now(),
 					"stock_status": workflow.StockStatus,
 				}).Error
 			return err

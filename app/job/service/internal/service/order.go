@@ -32,3 +32,11 @@ func (s *OrderService) RepairPending(ctx context.Context, limit int) (int, error
 func (s *OrderService) CloseExpired(ctx context.Context, now time.Time, limit int) (int, error) {
 	return s.oc.CloseExpired(ctx, now, limit)
 }
+
+func (s *OrderService) CheckStockConsistency(ctx context.Context, limit int) (int, error) {
+	return s.oc.CheckStockConsistency(ctx, limit)
+}
+
+func (s *OrderService) CollectWorkflowStats(ctx context.Context) (map[string]int64, error) {
+	return s.oc.CollectWorkflowStats(ctx)
+}
