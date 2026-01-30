@@ -9,6 +9,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	rr "github.com/go-resty/resty/v2"
 	"github.com/littleSand/adama/app/goods/service/internal/biz"
+	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/seckill"
 	"github.com/yedf/dtmcli"
 )
@@ -53,9 +54,9 @@ func (m ordersRepo) ListOrders(ctx context.Context) (*biz.Orders, error) {
 }
 
 func (m ordersRepo) CreateOrders(ctx context.Context, orders biz.Orders) error {
-	var dtmServer = "http://127.0.0.1:8080/api/dtmsvr"
-	var busi = "http://127.0.0.1:8003"
-	var orderSvc = "http://127.0.0.1:8001"
+	var dtmServer = envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:8080/api/dtmsvr")
+	var busi = envutil.Get("GOODS_SERVICE_URL", "http://127.0.0.1:8003")
+	var orderSvc = envutil.Get("ORDER_SERVICE_URL", "http://127.0.0.1:8001")
 
 	gid := dtmcli.MustGenGid(dtmServer)
 	err := dtmcli.TccGlobalTransaction(dtmServer, gid, func(tcc *dtmcli.Tcc) (*rr.Response, error) {

@@ -1,0 +1,17 @@
+server:
+  http:
+    addr: 0.0.0.0:8001
+    timeout: 2s
+  grpc:
+    addr: 0.0.0.0:9001
+    timeout: 1s
+data:
+  database:
+    driver: mysql
+    source: root:Root@123456@tcp(mysql:3306)/order?parseTime=true
+  redis:
+    addr: redis:6379
+    read_timeout: 0.2s
+    write_timeout: 0.2s
+  kafka:
+    addr: kafka:9092

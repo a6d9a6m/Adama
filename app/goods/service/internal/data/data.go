@@ -9,6 +9,7 @@ import (
 	"github.com/google/wire"
 	"github.com/littleSand/adama/app/goods/service/internal/conf"
 	"github.com/littleSand/adama/app/goods/service/internal/data/ent"
+	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/yedf/dtmcli"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -42,10 +43,10 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 
 	var dbSQLDTMConf = map[string]string{
 		"driver":   conf.Database.Driver,
-		"host":     "192.168.0.111",
+		"host":     envutil.Get("DTM_DB_HOST", "192.168.0.111"),
 		"user":     "root",
 		"password": "Root@123456",
-		"port":     "3307",
+		"port":     envutil.Get("DTM_DB_PORT", "3307"),
 	}
 	dbSQLDTM, err := dtmcli.SdbGet(dbSQLDTMConf)
 	dtmcli.FatalIfError(err)

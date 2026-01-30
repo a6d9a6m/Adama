@@ -1,0 +1,224 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: adama-mysql
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Root@123456}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - adama
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: adama-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - adama
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: adama-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - adama
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: adama-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - adama
+
+  etcd:
+    image: bitnami/etcd:3.5
+    container_name: adama-etcd
+    environment:
+      ALLOW_NONE_AUTHENTICATION: "yes"
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+    ports:
+      - "2379:2379"
+    networks:
+      - adama
+
+  nacos:
+    image: nacos/nacos-server:v2.2.3
+    container_name: adama-nacos
+    environment:
+      MODE: standalone
+    ports:
+      - "8848:8848"
+    networks:
+      - adama
+
+  dtm:
+    image: yedf/dtm:1.18
+    container_name: adama-dtm
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      STORE_DRIVER: mysql
+      STORE_HOST: mysql
+      STORE_PORT: 3306
+      STORE_USER: root
+      STORE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Root@123456}
+      STORE_DB: dtm_barrier
+    ports:
+      - "8085:8080"
+    networks:
+      - adama
+
+  user:
+    image: golang:1.16
+    container_name: adama-user
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+    working_dir: /workspace
+    command: sh -lc "go run ./app/user/service/cmd/server -conf ./deploy/configs/user.compose.yaml"
+    volumes:
+      - ./:/workspace
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    networks:
+      - adama
+
+  goods:
+    image: golang:1.16
+    container_name: adama-goods
+    depends_on:
+      - mysql
+      - redis
+      - dtm
+    working_dir: /workspace
+    command: sh -lc "go run ./app/goods/service/cmd/server -conf ./deploy/configs/goods.compose.yaml"
+    volumes:
+      - ./:/workspace
+    environment:
+      DTM_SERVER_URL: http://dtm:8080/api/dtmsvr
+      GOODS_SERVICE_URL: http://goods:8003
+      ORDER_SERVICE_URL: http://order:8001
+      DTM_DB_HOST: mysql
+      DTM_DB_PORT: "3306"
+    ports:
+      - "8003:8003"
+      - "9003:9003"
+    networks:
+      - adama
+
+  order:
+    image: golang:1.16
+    container_name: adama-order
+    depends_on:
+      - mysql
+      - redis
+      - kafka
+      - etcd
+      - user
+      - goods
+      - dtm
+    working_dir: /workspace
+    command: sh -lc "go run ./app/order/service/cmd/server -conf ./deploy/configs/order.compose.yaml"
+    volumes:
+      - ./:/workspace
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      USER_GRPC_ENDPOINT: user:9000
+      DTM_SERVER_URL: http://dtm:8080/api/dtmsvr
+      GOODS_SERVICE_URL: http://goods:8003
+      ORDER_SERVICE_URL: http://order:8001
+    ports:
+      - "8001:8001"
+      - "9001:9001"
+    networks:
+      - adama
+
+  task:
+    image: golang:1.16
+    container_name: adama-task
+    depends_on:
+      - mysql
+      - redis
+      - kafka
+      - order
+      - goods
+    working_dir: /workspace
+    command: sh -lc "go run ./app/job/service/cmd/server -conf ./deploy/configs/job.compose.yaml"
+    volumes:
+      - ./:/workspace
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      GOODS_CANCEL_URL: http://goods:8003/ordersCancel
+    ports:
+      - "8004:8004"
+      - "9004:9004"
+    networks:
+      - adama
+
+  gateway:
+    image: golang:1.16
+    container_name: adama-gateway
+    depends_on:
+      - user
+      - goods
+      - order
+    working_dir: /workspace
+    command: sh -lc "go run ./app/gateway/cmd/server -conf ./deploy/configs/gateway.compose.yaml"
+    volumes:
+      - ./:/workspace
+    ports:
+      - "8080:8080"
+    networks:
+      - adama
+
+  ops-ai:
+    image: golang:1.16
+    container_name: adama-ops-ai
+    depends_on:
+      - mysql
+    working_dir: /workspace
+    command: sh -lc "go run ./app/ops-ai/cmd/server -conf ./deploy/configs/ops-ai.compose.yaml"
+    volumes:
+      - ./:/workspace
+    ports:
+      - "8088:8088"
+    networks:
+      - adama
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  adama:
+    name: adama

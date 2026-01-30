@@ -1,0 +1,60 @@
+services:
+  gateway:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  user:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  goods:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  order:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  task:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  ops-ai:
+    image: golang:1.16
+    container_name: adama-ops-ai
+    depends_on:
+      - mysql
+    working_dir: /workspace
+    command: sh -lc "go run ./app/ops-ai/cmd/server -conf ./deploy/configs/ops-ai.compose.yaml"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+    environment:
+      GO111MODULE: "on"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8088:8088"
+    networks:
+      - adama
+
+volumes:
+  go_cache:
+
+networks:
+  adama:
+    external: true

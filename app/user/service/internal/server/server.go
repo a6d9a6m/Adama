@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-kratos/etcd/registry"
 	"github.com/google/wire"
+	"github.com/littleSand/adama/pkg/envutil"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -45,7 +46,7 @@ func NewRegistrar() *registry.Registry {
 	//return registry.New(client)
 
 	client, err := etcd.New(etcd.Config{
-		Endpoints: []string{"192.168.0.111:2379"},
+		Endpoints: envutil.CSV("ETCD_ENDPOINTS", []string{"192.168.0.111:2379"}),
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -12,6 +12,7 @@ import (
 	rr "github.com/go-resty/resty/v2"
 	pb "github.com/littleSand/adama/api/order/service/v1"
 	"github.com/littleSand/adama/app/order/service/internal/biz"
+	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/requestctx"
 	"github.com/littleSand/adama/pkg/seckill"
 	"github.com/yedf/dtmcli"
@@ -147,11 +148,9 @@ func (s *OrderService) HandleAdamaOrderCancel(ctx context.Context, req *AdamaOrd
 }
 
 func (s *OrderService) runAdamaTCC(ctx context.Context, order *biz.AdamaOrder) error {
-	const (
-		dtmServer   = "http://127.0.0.1:8080/api/dtmsvr"
-		goodsSvcURL = "http://127.0.0.1:8003"
-		orderSvcURL = "http://127.0.0.1:8001"
-	)
+	dtmServer := envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:8080/api/dtmsvr")
+	goodsSvcURL := envutil.Get("GOODS_SERVICE_URL", "http://127.0.0.1:8003")
+	orderSvcURL := envutil.Get("ORDER_SERVICE_URL", "http://127.0.0.1:8001")
 
 	gid := dtmcli.MustGenGid(dtmServer)
 	req := &AdamaOrderTCCRequest{

@@ -11,6 +11,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/littleSand/adama/app/job/service/internal/biz"
 	"github.com/littleSand/adama/pkg/cache"
+	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/seckill"
 	"gorm.io/gorm/clause"
 )
@@ -238,7 +239,7 @@ func NewOrderRepo(data *Data, logger log.Logger) biz.OrderQueueRepo {
 
 func callGoodsCancel(ctx context.Context, stockToken string) error {
 	payload, _ := json.Marshal(map[string]string{"sn": stockToken})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://127.0.0.1:8003/ordersCancel", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, envutil.Get("GOODS_CANCEL_URL", "http://127.0.0.1:8003/ordersCancel"), bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/littleSand/adama/app/order/service/internal/data/ent"
 	"github.com/littleSand/adama/app/order/service/internal/data/kafka"
 	"github.com/littleSand/adama/app/order/service/internal/data/kafka/event"
+	"github.com/littleSand/adama/pkg/envutil"
 	ggrpc "google.golang.org/grpc"
 )
 
@@ -76,11 +77,20 @@ func NewData(conf *conf.Data, logger log.Logger, rr *registry.Registry) (*Data, 
 	rdb.AddHook(redisotel.TracingHook{})
 
 	//gRpc
-	userRpc, err := grpc.DialInsecure(
-		context.Background(),
-		grpc.WithEndpoint("discovery:///user.grpc"),
-		grpc.WithDiscovery(rr),
-	)
+	userEndpoint := envutil.Get("USER_GRPC_ENDPOINT", "")
+	var userRpc *ggrpc.ClientConn
+	if userEndpoint != "" {
+		userRpc, err = grpc.DialInsecure(
+			context.Background(),
+			grpc.WithEndpoint(userEndpoint),
+		)
+	} else {
+		userRpc, err = grpc.DialInsecure(
+			context.Background(),
+			grpc.WithEndpoint("discovery:///user.grpc"),
+			grpc.WithDiscovery(rr),
+		)
+	}
 
 	if err != nil {
 		panic("grpc-error")
@@ -140,4 +150,3 @@ func ensureOrderWorkflowSchema(db *sql.DB) error {
 	}
 	return nil
 }
-

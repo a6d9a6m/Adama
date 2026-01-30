@@ -15,6 +15,7 @@ import (
 	"github.com/littleSand/adama/app/job/service/internal/biz"
 	"github.com/littleSand/adama/app/job/service/internal/conf"
 	"github.com/littleSand/adama/app/job/service/internal/service"
+	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -104,7 +105,7 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 
 	// []string{"192.168.2.27:9092"}, "order"
 
-	address := []string{"192.168.0.111:9092"}
+	address := envutil.CSV("KAFKA_BROKERS", []string{"192.168.0.111:9092"})
 	topic := "order"
 
 	r := kafka.NewReader(kafka.ReaderConfig{
