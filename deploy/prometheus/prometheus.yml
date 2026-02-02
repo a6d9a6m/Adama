@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "gateway"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8080"]
+
+  - job_name: "user"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["user:8000"]
+
+  - job_name: "goods"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["goods:8003"]
+
+  - job_name: "order"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["order:8001"]
+
+  - job_name: "task"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["task:8004"]

@@ -30,3 +30,11 @@ docker compose up -d
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
+
+## 监控增强
+
+叠加 Prometheus 和 Grafana：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
+```
