@@ -38,3 +38,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
 ```
+
+## Nginx 统一入口
+
+启动 Nginx 反向代理：
+
+```bash
+docker compose up -d nginx
+```
