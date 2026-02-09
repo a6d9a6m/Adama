@@ -16,11 +16,26 @@ import (
 	"github.com/littleSand/adama/app/job/service/internal/conf"
 	"github.com/littleSand/adama/app/job/service/internal/service"
 	"github.com/littleSand/adama/pkg/envutil"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 )
 
 var _ transport.Server = (*Server)(nil)
 var _ event2.Message = (*Message)(nil)
+
+var taskRunCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "adama",
+		Subsystem: "task",
+		Name:      "job_runs_total",
+		Help:      "Total number of scheduled task runs partitioned by task name and result.",
+	},
+	[]string{"task", "result"},
+)
+
+func init() {
+	prometheus.MustRegister(taskRunCounter)
+}
 
 type Server struct {
 	reader *kafka.Reader
@@ -235,8 +250,10 @@ func (s Server) runTaskLoop(ctx context.Context, task scheduledTask) {
 			}
 			result, runErr := task.run(ctx, now)
 			if runErr != nil {
+				taskRunCounter.WithLabelValues(task.name, "failed").Inc()
 				s.log.Errorf("task run failed: task=%s err=%v", task.name, runErr)
 			} else {
+				taskRunCounter.WithLabelValues(task.name, "success").Inc()
 				s.log.Infof("task run finished: task=%s %s", task.name, result)
 			}
 			_ = s.releaseTaskLock(ctx, task.name, token)

@@ -22,6 +22,7 @@ require (
 	github.com/klauspost/compress v1.13.1 // indirect
 	github.com/nacos-group/nacos-sdk-go v1.0.8
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
+	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/common v0.30.0 // indirect
 	github.com/prometheus/procfs v0.7.1 // indirect
 	github.com/segmentio/kafka-go v0.4.17
@@ -42,4 +43,3 @@ require (
 	gorm.io/driver/mysql v1.1.1 // indirect
 	gorm.io/gorm v1.21.12 // indirect
 )
-

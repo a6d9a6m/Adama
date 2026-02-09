@@ -1,0 +1,80 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (task) (increase(adama_task_job_runs_total{result=\"success\"}[1h]))",
+          "legendFormat": "{{task}}",
+          "refId": "A"
+        }
+      ],
+      "title": "任务执行次数",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (task) (increase(adama_task_job_runs_total{result=\"failed\"}[1h]))",
+          "legendFormat": "{{task}}",
+          "refId": "A"
+        }
+      ],
+      "title": "任务失败次数",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "adama"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "title": "补偿任务执行次数与失败次数",
+  "version": 1
+}

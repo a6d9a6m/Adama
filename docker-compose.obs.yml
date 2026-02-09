@@ -4,6 +4,7 @@ services:
     container_name: adama-prometheus
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9090:9090"
     networks:
@@ -17,8 +18,53 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
+    networks:
+      - adama
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: adama-mysqld-exporter
+    environment:
+      DATA_SOURCE_NAME: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@(mysql:3306)/
+    ports:
+      - "9104:9104"
+    networks:
+      - adama
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.61.0
+    container_name: adama-redis-exporter
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    networks:
+      - adama
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.7.0
+    container_name: adama-kafka-exporter
+    command:
+      - --kafka.server=kafka:9092
+    ports:
+      - "9308:9308"
+    networks:
+      - adama
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: adama-nginx-exporter
+    depends_on:
+      - nginx
+    command:
+      - -nginx.scrape-uri=http://nginx/nginx_status
+    ports:
+      - "9113:9113"
     networks:
       - adama
 

@@ -39,6 +39,13 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
 ```
 
+包含：
+
+- Prometheus 抓取服务 `/metrics`
+- MySQL / Redis / Kafka / Nginx exporter
+- Grafana 预置数据源与基础看板
+- Prometheus 最小告警规则
+
 ## Nginx 统一入口
 
 启动 Nginx 反向代理：

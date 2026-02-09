@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: adama
+    orgId: 1
+    folder: Adama
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
