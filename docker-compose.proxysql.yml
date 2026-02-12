@@ -1,4 +1,24 @@
 services:
+  user:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/user?parseTime=true
+
+  goods:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/goods?parseTime=true
+
+  order:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
+
+  task:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
+
+  ops-ai:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
+
   mysql-replica:
     image: mysql:8.0
     container_name: adama-mysql-replica

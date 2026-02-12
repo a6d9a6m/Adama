@@ -44,10 +44,11 @@ func NewData(conf *conf.Data, logger log.Logger, rr *registry.Registry) (*Data, 
 
 	//orm ent
 	log := log.NewHelper(log.With(logger, "module", "server-service/data"))
+	databaseSource := envutil.Get("MYSQL_DSN", conf.Database.Source)
 
 	client, err := ent.Open(
 		conf.Database.Driver,
-		conf.Database.Source,
+		databaseSource,
 	)
 	if err != nil {
 		log.Errorf("failed opening connection to sqlite: %v", err)
@@ -60,7 +61,7 @@ func NewData(conf *conf.Data, logger log.Logger, rr *registry.Registry) (*Data, 
 	}
 
 	// mysql
-	msql, err := sql.Open("mysql", conf.Database.Source)
+	msql, err := sql.Open("mysql", databaseSource)
 
 	if err != nil {
 		log.Errorf("failed conn mysql %v", err)

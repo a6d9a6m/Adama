@@ -68,3 +68,4 @@ docker compose -f docker-compose.yml -f docker-compose.proxysql.yml up -d
 - ProxySQL 业务端口：`6033`
 
 当前配置只提供“本地验证读写路由”的最小骨架。MySQL 主从复制仍需在容器启动后补充 `CHANGE REPLICATION SOURCE TO`、`START REPLICA` 等初始化步骤。
+应用侧数据库连接会通过 `MYSQL_DSN` 覆盖到 `proxysql:6033`，由 ProxySQL 将写流量发往主库、查询流量路由到只读副本。

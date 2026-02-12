@@ -10,6 +10,7 @@ import (
 	"github.com/google/wire"
 	"github.com/littleSand/adama/app/user/service/internal/conf"
 	"github.com/littleSand/adama/app/user/service/internal/data/ent"
+	"github.com/littleSand/adama/pkg/envutil"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -30,10 +31,11 @@ type Data struct {
 // NewData .
 func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 	log := log.NewHelper(log.With(logger, "module", "server-service/data"))
+	databaseSource := envutil.Get("MYSQL_DSN", conf.Database.Source)
 
 	client, err := ent.Open(
 		conf.Database.Driver,
-		conf.Database.Source,
+		databaseSource,
 	)
 	if err != nil {
 		log.Errorf("failed opening connection to sqlite: %v", err)
@@ -45,7 +47,7 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 		return nil, nil, err
 	}
 
-	sqlDB, err := sql.Open("mysql", conf.Database.Source)
+	sqlDB, err := sql.Open("mysql", databaseSource)
 	if err != nil {
 		return nil, nil, err
 	}

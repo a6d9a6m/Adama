@@ -27,10 +27,11 @@ type Data struct {
 // NewData creates the data layer.
 func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 	log := log.NewHelper(log.With(logger, "module", "server-service/data"))
+	databaseSource := envutil.Get("MYSQL_DSN", conf.Database.Source)
 
 	client, err := ent.Open(
 		conf.Database.Driver,
-		conf.Database.Source,
+		databaseSource,
 	)
 	if err != nil {
 		log.Errorf("failed opening connection to sqlite: %v", err)

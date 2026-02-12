@@ -2,9 +2,10 @@ package data
 
 import (
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/wire"
 	"github.com/littleSand/adama/app/job/service/internal/conf"
-	"github.com/go-redis/redis/v8"
+	"github.com/littleSand/adama/pkg/envutil"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
@@ -25,8 +26,9 @@ type Data struct {
 
 func NewDB(conf *conf.Data, logger log.Logger) *gorm.DB {
 	log := log.NewHelper(log.With(logger, "module", "order-service/data/gorm"))
+	databaseSource := envutil.Get("MYSQL_DSN", conf.Database.Source)
 
-	db, err := gorm.Open(mysql.Open(conf.Database.Source), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(databaseSource), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed opening connection to mysql: %v", err)
 	}
@@ -59,4 +61,3 @@ func NewData(conf *conf.Data, db *gorm.DB, logger log.Logger) (*Data, func(), er
 		log: log1,
 	}, cleanup, nil
 }
-

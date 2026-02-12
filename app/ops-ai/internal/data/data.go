@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/littleSand/adama/app/ops-ai/internal/conf"
+	"github.com/littleSand/adama/pkg/envutil"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -77,8 +78,9 @@ func NewData(cfg *conf.Data, logger log.Logger) (*Data, func(), error) {
 	}
 
 	var db *sql.DB
-	if cfg.Database.Driver != "" && cfg.Database.Source != "" {
-		db, err = sql.Open(cfg.Database.Driver, cfg.Database.Source)
+	databaseSource := envutil.Get("MYSQL_DSN", cfg.Database.Source)
+	if cfg.Database.Driver != "" && databaseSource != "" {
+		db, err = sql.Open(cfg.Database.Driver, databaseSource)
 		if err != nil {
 			return nil, nil, err
 		}
