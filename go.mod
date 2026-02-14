@@ -8,7 +8,6 @@ require (
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/go-kratos/etcd v0.1.1
 	github.com/go-kratos/kratos/v2 v2.0.0
-	github.com/go-kratos/nacos v0.1.0
 	github.com/go-playground/form/v4 v4.2.0 // indirect
 	github.com/go-redis/redis v6.15.9+incompatible // indirect
 	github.com/go-redis/redis/extra/redisotel v0.3.0

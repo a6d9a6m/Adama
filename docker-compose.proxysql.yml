@@ -20,7 +20,7 @@ services:
       MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
 
   mysql-replica:
-    image: mysql:8.0
+    image: ${MYSQL_IMAGE:-mysql:8.0}
     container_name: adama-mysql-replica
     command:
       - --default-authentication-plugin=mysql_native_password

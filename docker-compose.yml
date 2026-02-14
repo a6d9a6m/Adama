@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:8.0
+    image: ${MYSQL_IMAGE:-mysql:8.0}
     container_name: adama-mysql
     command:
       - --default-authentication-plugin=mysql_native_password
@@ -17,7 +17,7 @@ services:
       - adama
 
   redis:
-    image: redis:6.2-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     container_name: adama-redis
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -55,12 +55,14 @@ services:
       - adama
 
   etcd:
-    image: bitnami/etcd:3.5
+    image: ${ETCD_IMAGE:-registry.k8s.io/etcd:3.5.21-0}
     container_name: adama-etcd
-    environment:
-      ALLOW_NONE_AUTHENTICATION: "yes"
-      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
-      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+    command:
+      - /usr/local/bin/etcd
+      - --name=adama-etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd-data
     ports:
       - "2379:2379"
     networks:
@@ -90,12 +92,12 @@ services:
       STORE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Root@123456}
       STORE_DB: dtm_barrier
     ports:
-      - "8085:8080"
+      - "8085:36789"
     networks:
       - adama
 
   user:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-user
     depends_on:
       - mysql
@@ -105,8 +107,15 @@ services:
     command: sh -lc "go run ./app/user/service/cmd/server -conf ./deploy/configs/user.compose.yaml"
     volumes:
       - ./:/workspace
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     environment:
       ETCD_ENDPOINTS: etcd:2379
+      GO111MODULE: "on"
+      GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.org}
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     ports:
       - "8000:8000"
       - "9000:9000"
@@ -114,7 +123,7 @@ services:
       - adama
 
   goods:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-goods
     depends_on:
       - mysql
@@ -124,12 +133,19 @@ services:
     command: sh -lc "go run ./app/goods/service/cmd/server -conf ./deploy/configs/goods.compose.yaml"
     volumes:
       - ./:/workspace
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     environment:
-      DTM_SERVER_URL: http://dtm:8080/api/dtmsvr
+      DTM_SERVER_URL: http://dtm:36789/api/dtmsvr
       GOODS_SERVICE_URL: http://goods:8003
       ORDER_SERVICE_URL: http://order:8001
       DTM_DB_HOST: mysql
       DTM_DB_PORT: "3306"
+      GO111MODULE: "on"
+      GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.org}
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     ports:
       - "8003:8003"
       - "9003:9003"
@@ -137,7 +153,7 @@ services:
       - adama
 
   order:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-order
     depends_on:
       - mysql
@@ -151,12 +167,19 @@ services:
     command: sh -lc "go run ./app/order/service/cmd/server -conf ./deploy/configs/order.compose.yaml"
     volumes:
       - ./:/workspace
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     environment:
       ETCD_ENDPOINTS: etcd:2379
       USER_GRPC_ENDPOINT: user:9000
-      DTM_SERVER_URL: http://dtm:8080/api/dtmsvr
+      DTM_SERVER_URL: http://dtm:36789/api/dtmsvr
       GOODS_SERVICE_URL: http://goods:8003
       ORDER_SERVICE_URL: http://order:8001
+      GO111MODULE: "on"
+      GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.org}
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     ports:
       - "8001:8001"
       - "9001:9001"
@@ -164,7 +187,7 @@ services:
       - adama
 
   task:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-task
     depends_on:
       - mysql
@@ -176,9 +199,16 @@ services:
     command: sh -lc "go run ./app/job/service/cmd/server -conf ./deploy/configs/job.compose.yaml"
     volumes:
       - ./:/workspace
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     environment:
       KAFKA_BROKERS: kafka:9092
       GOODS_CANCEL_URL: http://goods:8003/ordersCancel
+      GO111MODULE: "on"
+      GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.org}
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     ports:
       - "8004:8004"
       - "9004:9004"
@@ -186,7 +216,7 @@ services:
       - adama
 
   gateway:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-gateway
     depends_on:
       - user
@@ -196,13 +226,21 @@ services:
     command: sh -lc "go run ./app/gateway/cmd/server -conf ./deploy/configs/gateway.compose.yaml"
     volumes:
       - ./:/workspace
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    environment:
+      GO111MODULE: "on"
+      GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.org}
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     ports:
       - "8080:8080"
     networks:
       - adama
 
   ops-ai:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-ops-ai
     depends_on:
       - mysql
@@ -210,6 +248,14 @@ services:
     command: sh -lc "go run ./app/ops-ai/cmd/server -conf ./deploy/configs/ops-ai.compose.yaml"
     volumes:
       - ./:/workspace
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    environment:
+      GO111MODULE: "on"
+      GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.org}
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     ports:
       - "8088:8088"
     networks:
@@ -231,6 +277,8 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  go_mod_cache:
+  go_build_cache:
 
 networks:
   adama:

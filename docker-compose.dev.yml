@@ -35,7 +35,7 @@ services:
       - go_cache:/go/pkg/mod
 
   ops-ai:
-    image: golang:1.16
+    image: ${ADAMA_GO_IMAGE:-mcr.microsoft.com/devcontainers/go:1.25-trixie}
     container_name: adama-ops-ai
     depends_on:
       - mysql
