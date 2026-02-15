@@ -1,7 +1,5 @@
 package conf
 
-import "time"
-
 type Bootstrap struct {
 	Server    Server    `json:"server" yaml:"server"`
 	Upstreams Upstreams `json:"upstreams" yaml:"upstreams"`
@@ -12,9 +10,9 @@ type Server struct {
 }
 
 type HTTP struct {
-	Network string        `json:"network" yaml:"network"`
-	Addr    string        `json:"addr" yaml:"addr"`
-	Timeout time.Duration `json:"timeout" yaml:"timeout"`
+	Network string `json:"network" yaml:"network"`
+	Addr    string `json:"addr" yaml:"addr"`
+	Timeout string `json:"timeout" yaml:"timeout"`
 }
 
 type Upstreams struct {
@@ -24,6 +22,6 @@ type Upstreams struct {
 }
 
 type Upstream struct {
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Timeout time.Duration `json:"timeout" yaml:"timeout"`
+	BaseURL string `json:"base_url" yaml:"base_url"`
+	Timeout string `json:"timeout" yaml:"timeout"`
 }

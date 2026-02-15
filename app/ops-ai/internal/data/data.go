@@ -363,7 +363,10 @@ func newOpenAIClient(cfg conf.OpenAI) *OpenAIClient {
 	if cfg.APIKey == "" || cfg.BaseURL == "" {
 		return nil
 	}
-	timeout := cfg.Timeout
+	timeout, err := parseTimeout(cfg.Timeout, 20*time.Second)
+	if err != nil {
+		panic(err)
+	}
 	if timeout <= 0 {
 		timeout = 20 * time.Second
 	}
@@ -377,6 +380,13 @@ func newOpenAIClient(cfg conf.OpenAI) *OpenAIClient {
 		model:   model,
 		client:  &http.Client{Timeout: timeout},
 	}
+}
+
+func parseTimeout(raw string, fallback time.Duration) (time.Duration, error) {
+	if raw == "" {
+		return fallback, nil
+	}
+	return time.ParseDuration(raw)
 }
 
 type responseRequest struct {
