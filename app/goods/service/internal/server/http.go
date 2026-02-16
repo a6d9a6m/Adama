@@ -36,8 +36,9 @@ func NewHTTPServer(c *conf.Server, s *service.GoodsService, logger log.Logger) *
 	}
 	srv := http.NewServer(opts...)
 
-	pb.RegisterGoodsHTTPServer(srv, s)
+	// Register fixed routes before generated param routes like /goods/{id}.
 	registerGoodsRoutes(srv, s)
+	pb.RegisterGoodsHTTPServer(srv, s)
 	return srv
 }
 

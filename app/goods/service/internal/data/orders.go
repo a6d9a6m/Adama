@@ -54,7 +54,7 @@ func (m ordersRepo) ListOrders(ctx context.Context) (*biz.Orders, error) {
 }
 
 func (m ordersRepo) CreateOrders(ctx context.Context, orders biz.Orders) error {
-	var dtmServer = envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:8080/api/dtmsvr")
+	var dtmServer = envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:36789/api/dtmsvr")
 	var busi = envutil.Get("GOODS_SERVICE_URL", "http://127.0.0.1:8003")
 	var orderSvc = envutil.Get("ORDER_SERVICE_URL", "http://127.0.0.1:8001")
 

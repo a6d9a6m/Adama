@@ -48,6 +48,7 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 		"user":     "root",
 		"password": "Root@123456",
 		"port":     envutil.Get("DTM_DB_PORT", "3307"),
+		"database": "goods",
 	}
 	dbSQLDTM, err := dtmcli.SdbGet(dbSQLDTMConf)
 	dtmcli.FatalIfError(err)

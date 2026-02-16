@@ -49,6 +49,11 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 	if !ok || userID <= 0 {
 		userID = 88
 	}
+	dtmServer := envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:36789/api/dtmsvr")
+	gid, err := generateDTMGID(dtmServer)
+	if err != nil {
+		return nil, err
+	}
 	token := requestctx.HeaderValue(ctx, headerSeckillToken)
 	if token == "" {
 		return nil, errors.New(400, "SECKILL_TOKEN_REQUIRED", "seckill token required")
@@ -77,7 +82,7 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 		Amount:  order.Amount,
 	}.Encode()
 
-	if err := s.runAdamaTCC(ctx, order); err != nil {
+	if err := s.runAdamaTCC(ctx, gid, order); err != nil {
 		s.log.Error(err)
 		return nil, err
 	}
@@ -147,12 +152,11 @@ func (s *OrderService) HandleAdamaOrderCancel(ctx context.Context, req *AdamaOrd
 	})
 }
 
-func (s *OrderService) runAdamaTCC(ctx context.Context, order *biz.AdamaOrder) error {
-	dtmServer := envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:8080/api/dtmsvr")
+func (s *OrderService) runAdamaTCC(ctx context.Context, gid string, order *biz.AdamaOrder) error {
+	dtmServer := envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:36789/api/dtmsvr")
 	goodsSvcURL := envutil.Get("GOODS_SERVICE_URL", "http://127.0.0.1:8003")
 	orderSvcURL := envutil.Get("ORDER_SERVICE_URL", "http://127.0.0.1:8001")
 
-	gid := dtmcli.MustGenGid(dtmServer)
 	req := &AdamaOrderTCCRequest{
 		OrderID:    order.OrderId,
 		UserID:     order.UserId,
@@ -168,6 +172,15 @@ func (s *OrderService) runAdamaTCC(ctx context.Context, order *biz.AdamaOrder) e
 		}
 		return tcc.CallBranch(req, orderSvcURL+"/adama/tcc/order/try", orderSvcURL+"/adama/tcc/order/confirm", orderSvcURL+"/adama/tcc/order/cancel")
 	})
+}
+
+func generateDTMGID(server string) (string, error) {
+	res := map[string]string{}
+	resp, err := dtmcli.RestyClient.R().SetResult(&res).Get(server + "/newGid")
+	if err != nil || res["gid"] == "" {
+		return "", errors.New(500, "DTM_UNAVAILABLE", fmt.Sprintf("generate dtm gid failed: %v, resp: %v", err, resp))
+	}
+	return res["gid"], nil
 }
 
 func (s *OrderService) ListOrdersHTTP(ctx khttp.Context) error {
