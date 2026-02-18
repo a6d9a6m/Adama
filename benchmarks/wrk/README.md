@@ -1,79 +1,152 @@
-`wrk -t4 -c10 -d5s -T1s --script=post.json.lua --latency http://127.0.0.1:8001/adama/order`
+# WRK Benchmark Suite
 
+## Layout
 
-[2021�?8�?8�?5:08:16] kafka-mac 本地搭建
-
-```shell
-jw@jianwei wrk$ wrk -t4 -c10 -d5s -T2s --script=post.json.lua --latency http://127.0.0.1:8001/adama/order
-Running 5s test @ http://127.0.0.1:8001/adama/order
-  4 threads and 10 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     7.22ms   20.48ms 202.93ms   96.16%
-    Req/Sec   560.23    135.44   717.00     87.82%
-  Latency Distribution
-     50%    3.10ms
-     75%    3.75ms
-     90%    5.61ms
-     99%  133.76ms
-  11077 requests in 5.02s, 1.15MB read
-Requests/sec:   2208.23
-Transfer/sec:    235.06KB
+```text
+benchmarks/wrk/
+  README.md
+  legacy/
+  data/
+  results/
+  scripts/
+    read/
+    write/
+    seckill/
+    chain/
+  cmd/
+    record/
+    report/
 ```
 
-[2021�?8�?7�?0:06:29] kafka-docker 搭建
+## Prerequisites
 
-```shell
-jw@jianwei wrk$ wrk -t4 -c10 -d5s -T1s --script=post.json.lua --latency http://127.0.0.1:8001/adama/order
-Running 5s test @ http://127.0.0.1:8001/adama/order
-  4 threads and 10 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     3.77ms    2.59ms  11.28ms   86.11%
-    Req/Sec     3.38      5.97    22.00     90.48%
-  Latency Distribution
-     50%    2.79ms
-     75%    3.55ms
-     90%    9.73ms
-     99%   11.28ms
-  76 requests in 5.06s, 8.09KB read
-  Socket errors: connect 0, read 0, write 0, timeout 40
-Requests/sec:     15.03
-Transfer/sec:      1.60KB
+1. Start the local stack with `docker compose`.
+2. Make sure there is baseline data for goods, orders, addresses, and seckill goods.
+3. Install `wrk` from the official `wg/wrk` source project or a trusted native package.
+4. Use the correct entrypoint URL:
+   - service: direct service port
+   - gateway: `http://127.0.0.1:8080`
+   - nginx: `http://127.0.0.1`
+
+## Common Inputs
+
+The scripts use environment variables instead of hard-coded paths.
+
+- `TARGET`: `service`, `gateway`, or `nginx`
+- `USER_ID`: user id for list and write scenarios, default `88`
+- `GOODS_ID`: seckill goods id, default `1`
+- `PAGE`: default `1`
+- `PAGE_SIZE`: default `10`
+- `KEYWORD`: optional goods keyword
+
+The wrk runtime parameters remain standard CLI arguments:
+
+- `-t` threads
+- `-c` connections
+- `-d` duration
+- `-T` timeout
+
+## Read Scenarios
+
+Direct goods service:
+
+```bash
+TARGET=service wrk -t4 -c32 -d15s -T2s --script=benchmarks/wrk/scripts/read/goods_list.lua http://127.0.0.1:8003
 ```
 
+Through gateway:
 
-[2021�?8�?7�?0:05:47] v1
-
-```shell
-jw@jianwei wrk$ wrk -t4 -c10 -d5s -T1s --script=post.json.lua --latency http://127.0.0.1:8001/adama/order
-Running 5s test @ http://127.0.0.1:8001/adama/order
-  4 threads and 10 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency   506.40ms  526.09ms 999.36ms  100.00%
-    Req/Sec     1.40      0.60     3.00     65.00%
-  Latency Distribution
-     50%  997.67ms
-     75%  998.54ms
-     90%  999.36ms
-     99%  999.36ms
-  44 requests in 5.08s, 4.68KB read
-  Socket errors: connect 0, read 0, write 0, timeout 36
-Requests/sec:      8.67
-Transfer/sec:      0.92KB
+```bash
+TARGET=gateway wrk -t4 -c32 -d15s -T2s --script=benchmarks/wrk/scripts/read/goods_list.lua http://127.0.0.1:8080
 ```
 
-```shell
-jianwei:wrk jw$ wrk -t4 -c10 -d5s -T1s --script=post.json.lua --latency http://127.0.0.1:8001/adama/order
-Running 5s test @ http://127.0.0.1:8001/adama/order
-  4 threads and 10 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    61.84ms   70.50ms 883.00ms   96.22%
-    Req/Sec    37.34     11.03    70.00     69.23%
-  Latency Distribution
-     50%   48.13ms
-     75%   62.52ms
-     90%   82.04ms
-     99%  409.75ms
-  741 requests in 5.05s, 78.88KB read
-Requests/sec:    146.79
-Transfer/sec:     15.63KB
+Through nginx:
+
+```bash
+TARGET=nginx wrk -t4 -c32 -d15s -T2s --script=benchmarks/wrk/scripts/read/goods_list.lua http://127.0.0.1
 ```
+
+Other read scenarios:
+
+- `benchmarks/wrk/scripts/read/order_list.lua`
+- `benchmarks/wrk/scripts/read/address_list.lua`
+
+## Write Scenarios
+
+Address create:
+
+```bash
+TARGET=gateway USER_ID=88 wrk -t2 -c8 -d10s -T2s --script=benchmarks/wrk/scripts/write/address_create.lua http://127.0.0.1:8080
+```
+
+## Seckill Scenarios
+
+Goods detail only:
+
+```bash
+TARGET=gateway USER_ID=88 GOODS_ID=1 wrk -t2 -c8 -d10s -T2s --script=benchmarks/wrk/scripts/seckill/goods_detail.lua http://127.0.0.1:8080
+```
+
+Two-step token + create order flow:
+
+```bash
+TARGET=gateway USER_ID=88 GOODS_ID=1 wrk -t2 -c8 -d10s -T2s --script=benchmarks/wrk/scripts/seckill/order_flow.lua http://127.0.0.1:8080
+```
+
+This flow alternates:
+
+1. `GET /adama/goods/{id}` to fetch `seckill_token`
+2. `POST /adama/order` with `X-Seckill-Token`
+
+## Matrix Runner
+
+The PowerShell helper runs the same read scenario across service, gateway, and nginx:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\benchmarks\wrk\scripts\chain\run-read-matrix.ps1 -Scenario goods_list
+```
+
+Supported scenarios:
+
+- `goods_list`
+- `order_list`
+- `address_list`
+
+## Result Recording
+
+Record a wrk output file to `jsonl`:
+
+```bash
+go run ./benchmarks/wrk/cmd/record -input .\tmp\goods-list.txt -scenario goods_list -env local -entrypoint gateway -db-mode primary
+```
+
+Generate a simple summary:
+
+```bash
+go run ./benchmarks/wrk/cmd/report -input benchmarks/wrk/results/history.jsonl -scenario goods_list
+```
+
+## Output Convention
+
+The scripts append custom lines so the recorder can parse them:
+
+- `Non-2xx responses: N`
+- `Socket errors: connect X, read Y, write Z, timeout N`
+
+The recorder stores:
+
+- throughput
+- average latency
+- p50/p90/p99
+- transfer rate
+- timeout count
+- socket errors
+- non-2xx count
+- scenario metadata
+
+## Legacy Scripts
+
+The previous ad hoc scripts are kept under `benchmarks/wrk/legacy/`:
+
+- `legacy/post.lua`
+- `legacy/post.json.lua`
