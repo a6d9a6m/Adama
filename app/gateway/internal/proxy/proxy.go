@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,11 +57,18 @@ func NewUpstream(name, rawURL string, timeout time.Duration, logger log.Logger) 
 	baseDirector := reverseProxy.Director
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 256
+	transport.MaxIdleConnsPerHost = 128
+	transport.MaxConnsPerHost = 256
+	transport.IdleConnTimeout = 90 * time.Second
 	if timeout > 0 {
 		transport.ResponseHeaderTimeout = timeout
 	}
 	reverseProxy.Transport = transport
 	reverseProxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, proxyErr error) {
+		if errors.Is(proxyErr, context.Canceled) || errors.Is(request.Context().Err(), context.Canceled) {
+			return
+		}
 		log.NewHelper(logger).Errorf("gateway proxy %s failed: %v", name, proxyErr)
 		writeJSONError(writer, http.StatusBadGateway, "upstream_unavailable", "upstream request failed")
 	}
@@ -115,7 +123,7 @@ func (d *Dispatcher) ServeHTTP(writer http.ResponseWriter, request *http.Request
 	writer.Header().Set(requestctx.HeaderRequestID, requestID)
 	writer.Header().Set(requestctx.HeaderTraceID, traceID)
 
-	d.log.Infof("gateway proxy target=%s method=%s path=%s trace_id=%s", target.name, request.Method, path, traceID)
+	d.log.Debugf("gateway proxy target=%s method=%s path=%s trace_id=%s", target.name, request.Method, path, traceID)
 	target.proxy.ServeHTTP(writer, forwardRequest)
 }
 
