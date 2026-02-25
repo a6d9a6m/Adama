@@ -49,53 +49,67 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 	if !ok || userID <= 0 {
 		userID = 88
 	}
-	dtmServer := envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:36789/api/dtmsvr")
-	gid, err := generateDTMGID(dtmServer)
-	if err != nil {
-		return nil, err
-	}
 	token := requestctx.HeaderValue(ctx, headerSeckillToken)
 	if token == "" {
 		return nil, errors.New(400, "SECKILL_TOKEN_REQUIRED", "seckill token required")
 	}
-	if err := s.so.ConsumeToken(ctx, userID, req.Gid, token); err != nil {
+
+	goods, err := s.goods.GetAdamaGoods(ctx, req.Gid)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.so.AcquireUserLimit(ctx, userID, req.Gid, seckill.DefaultPaymentTTL); err != nil {
-		return nil, err
+	now := time.Now()
+	if now.Before(goods.StartDate) {
+		return nil, errors.New(400, "SECKILL_NOT_STARTED", "seckill not started")
+	}
+	if now.After(goods.EndDate) {
+		return nil, errors.New(400, "SECKILL_ENDED", "seckill ended")
 	}
 
 	order := &biz.AdamaOrder{
-		UserId:  userID,
-		GoodsId: req.Gid,
-		Amount:  amount,
+		UserId:   userID,
+		GoodsId:  req.Gid,
+		Amount:   amount,
+		ExpireAt: now.Add(seckill.DefaultPaymentTTL),
 	}
-	if err := s.so.CreateAdamaOrder(ctx, order); err != nil {
+
+	userMarkerTTL := time.Until(goods.EndDate)
+	if userMarkerTTL <= 0 {
+		userMarkerTTL = seckill.DefaultPaymentTTL
+	}
+	if err := s.so.Reserve(ctx, order, token, userMarkerTTL); err != nil {
 		s.log.Error(err)
 		return nil, err
 	}
 
-	order.ExpireAt = time.Now().Add(seckill.DefaultPaymentTTL)
 	order.StockToken = seckill.StockToken{
 		OrderID: order.OrderId,
 		GoodsID: order.GoodsId,
 		Amount:  order.Amount,
 	}.Encode()
 
-	if err := s.runAdamaTCC(ctx, gid, order); err != nil {
+	if err := s.so.Prepare(ctx, order); err != nil {
 		s.log.Error(err)
+		_ = s.so.Cancel(ctx, order)
 		return nil, err
 	}
 
 	dispatchErr := s.so.SendKafka(ctx, order)
-	if markErr := s.so.MarkSyncResult(ctx, order.OrderId, dispatchErr); markErr != nil {
+	if dispatchErr != nil {
+		s.log.Warnf("adama order queue dispatch failed: order=%d err=%v", order.OrderId, dispatchErr)
+		if cancelErr := s.so.Cancel(ctx, order); cancelErr != nil {
+			s.log.Errorf("cancel queued adama order failed: order=%d err=%v", order.OrderId, cancelErr)
+		}
+		if markErr := s.so.MarkSyncResult(ctx, order.OrderId, dispatchErr); markErr != nil {
+			s.log.Error(markErr)
+		}
+		return nil, dispatchErr
+	}
+	if markErr := s.so.MarkSyncResult(ctx, order.OrderId, nil); markErr != nil {
 		s.log.Error(markErr)
 	}
-	if dispatchErr != nil {
-		s.log.Warnf("adama order queued for async repair: order=%d err=%v", order.OrderId, dispatchErr)
-	}
 
-	return &pb.CreateAdamaOrderReply{DtmResult: "SUCCESS"}, nil
+	return &pb.CreateAdamaOrderReply{DtmResult: "QUEUED"}, nil
 }
 
 func (s *OrderService) CreateAdamaOrderTry(ctx context.Context, req *pb.CreateAdamaOrderRequest) (*pb.CreateAdamaOrderReply, error) {

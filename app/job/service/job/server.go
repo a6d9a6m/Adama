@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"fmt"
-	stdlog "log"
 	"math/rand"
 	"strconv"
 	"time"
@@ -98,10 +97,10 @@ func (s Server) Receive(ctx context.Context, handler event2.Handler) error {
 				header: h,
 			})
 			if err != nil {
-				stdlog.Fatal("message handing exception:", err)
+				s.log.Errorf("message handling failed: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
 			}
 			if err := s.reader.CommitMessages(ctx, m); err != nil {
-				stdlog.Fatal("failed to commit message:", err)
+				s.log.Errorf("failed to commit message: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
 			}
 		}
 	}()

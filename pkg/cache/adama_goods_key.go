@@ -17,3 +17,7 @@ func AdamaOrderTokenKey(userID, goodsID int64, token string) string {
 func AdamaOrderIdempotencyKey(userID, goodsID int64) string {
 	return fmt.Sprintf("ADAMA:ORDER:IDEMPOTENT:%d:%d", userID, goodsID)
 }
+
+func AdamaOrderUserSetKey(goodsID int64) string {
+	return fmt.Sprintf("ADAMA:ORDER:USERS:%d", goodsID)
+}

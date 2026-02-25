@@ -27,6 +27,7 @@ type AdamaOrderRepo interface {
 	IssueSeckillToken(ctx context.Context, userID int64, goodsID int64, expireAt time.Time) (string, error)
 	ConsumeSeckillToken(ctx context.Context, userID int64, goodsID int64, token string) error
 	AcquireUserOrderLimit(ctx context.Context, userID int64, goodsID int64, ttl time.Duration) error
+	ReserveSeckillOrder(ctx context.Context, order *AdamaOrder, token string, userMarkerTTL time.Duration) error
 }
 
 type AdamaOrderUsecase struct {
@@ -84,4 +85,8 @@ func (uc *AdamaOrderUsecase) ConsumeToken(ctx context.Context, userID int64, goo
 
 func (uc *AdamaOrderUsecase) AcquireUserLimit(ctx context.Context, userID int64, goodsID int64, ttl time.Duration) error {
 	return uc.repo.AcquireUserOrderLimit(ctx, userID, goodsID, ttl)
+}
+
+func (uc *AdamaOrderUsecase) Reserve(ctx context.Context, order *AdamaOrder, token string, userMarkerTTL time.Duration) error {
+	return uc.repo.ReserveSeckillOrder(ctx, order, token, userMarkerTTL)
 }

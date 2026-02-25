@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -63,13 +64,6 @@ func (s adamaOrderRepo) CreateAdamaOrder(ctx context.Context, order *biz.AdamaOr
 	if order.Amount <= 0 {
 		order.Amount = 1
 	}
-	stock := s.data.rdb.Decr(ctx, cache.AdamaGoodStockKey(order.GoodsId)).Val()
-	if stock < 0 {
-		_ = s.data.rdb.Incr(ctx, cache.AdamaGoodStockKey(order.GoodsId)).Err()
-		_ = s.data.rdb.Set(ctx, cache.AdamaGoodOverKey(order.GoodsId), true, 0).Err()
-		return errors.New(500, "GOODS_STOCK_EMPTY", "goods stock empty")
-	}
-
 	node, err := snowflake.NewNode(1)
 	if err != nil {
 		s.log.Error("snowflake generate error")
@@ -78,6 +72,54 @@ func (s adamaOrderRepo) CreateAdamaOrder(ctx context.Context, order *biz.AdamaOr
 
 	order.OrderId = node.Generate().Int64()
 	return nil
+}
+
+func (s adamaOrderRepo) ReserveSeckillOrder(ctx context.Context, order *biz.AdamaOrder, token string, userMarkerTTL time.Duration) error {
+	if order.Amount <= 0 {
+		order.Amount = 1
+	}
+	node, err := snowflake.NewNode(1)
+	if err != nil {
+		s.log.Error("snowflake generate error")
+		return err
+	}
+
+	order.OrderId = node.Generate().Int64()
+	tokenKey := cache.AdamaOrderTokenKey(order.UserId, order.GoodsId, token)
+	keys := []string{
+		cache.AdamaGoodStockKey(order.GoodsId),
+		cache.AdamaGoodOverKey(order.GoodsId),
+		tokenKey,
+		cache.AdamaOrderUserSetKey(order.GoodsId),
+	}
+	args := []interface{}{
+		strconv.FormatInt(order.UserId, 10),
+		strconv.FormatInt(order.Amount, 10),
+		strconv.FormatInt(int64(userMarkerTTL/time.Second), 10),
+	}
+	res, err := s.data.rdb.Eval(ctx, reserveSeckillOrderScript, keys, args...).Result()
+	if err != nil {
+		return err
+	}
+	code, remain, err := parseReserveResult(res)
+	if err != nil {
+		return err
+	}
+	switch code {
+	case 0:
+		if remain <= 0 {
+			_ = s.data.rdb.Set(ctx, cache.AdamaGoodOverKey(order.GoodsId), true, 0).Err()
+		}
+		return nil
+	case 1:
+		return errors.New(400, "SECKILL_TOKEN_INVALID", "seckill token invalid or already used")
+	case 2:
+		return errors.New(429, "SECKILL_DUPLICATE_REQUEST", "duplicate seckill request")
+	case 3:
+		return errors.New(500, "GOODS_STOCK_EMPTY", "goods stock empty")
+	default:
+		return errors.New(500, "SECKILL_RESERVE_FAILED", "reserve seckill order failed")
+	}
 }
 
 func (s adamaOrderRepo) PrepareAdamaOrder(ctx context.Context, order *biz.AdamaOrder) error {
@@ -137,6 +179,8 @@ func (s adamaOrderRepo) CancelAdamaOrder(ctx context.Context, order *biz.AdamaOr
 			return redisErr
 		}
 		_ = s.data.rdb.Del(ctx, cache.AdamaGoodOverKey(workflow.GoodsID)).Err()
+		_ = s.data.rdb.SRem(ctx, cache.AdamaOrderUserSetKey(workflow.GoodsID), strconv.FormatInt(workflow.UserID, 10)).Err()
+		_ = s.data.rdb.Del(ctx, cache.AdamaOrderIdempotencyKey(workflow.UserID, workflow.GoodsID)).Err()
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -209,6 +253,56 @@ func NewAdamaOrderRepo(data *Data, logger log.Logger) biz.AdamaOrderRepo {
 		data: data,
 		log:  log.NewHelper(log.With(logger, "module", "data/server-service")),
 	}
+}
+
+const reserveSeckillOrderScript = `
+local stock = tonumber(redis.call("GET", KEYS[1]) or "-1")
+local amount = tonumber(ARGV[2])
+local marker_ttl = tonumber(ARGV[3]) or 0
+
+if redis.call("EXISTS", KEYS[3]) == 0 then
+	return {1, stock}
+end
+
+if redis.call("SISMEMBER", KEYS[4], ARGV[1]) == 1 then
+	return {2, stock}
+end
+
+if stock < amount then
+	if stock <= 0 then
+		redis.call("SET", KEYS[2], "1")
+	end
+	return {3, stock}
+end
+
+local remain = redis.call("DECRBY", KEYS[1], amount)
+redis.call("DEL", KEYS[3])
+redis.call("SADD", KEYS[4], ARGV[1])
+if marker_ttl > 0 then
+	redis.call("EXPIRE", KEYS[4], marker_ttl)
+end
+if remain <= 0 then
+	redis.call("SET", KEYS[2], "1")
+else
+	redis.call("DEL", KEYS[2])
+end
+return {0, remain}
+`
+
+func parseReserveResult(raw interface{}) (int64, int64, error) {
+	values, ok := raw.([]interface{})
+	if !ok || len(values) != 2 {
+		return 0, 0, fmt.Errorf("unexpected reserve result: %T", raw)
+	}
+	code, ok := values[0].(int64)
+	if !ok {
+		return 0, 0, fmt.Errorf("unexpected reserve code type: %T", values[0])
+	}
+	remain, ok := values[1].(int64)
+	if !ok {
+		return 0, 0, fmt.Errorf("unexpected reserve remain type: %T", values[1])
+	}
+	return code, remain, nil
 }
 
 type workflowRecord struct {

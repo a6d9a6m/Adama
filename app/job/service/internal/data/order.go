@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
+	rr "github.com/go-resty/resty/v2"
 	"github.com/littleSand/adama/app/job/service/internal/biz"
 	"github.com/littleSand/adama/pkg/cache"
 	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/seckill"
+	"github.com/yedf/dtmcli"
 	"gorm.io/gorm/clause"
 )
 
@@ -55,6 +57,29 @@ func (AdamaOrderWorkflow) TableName() string {
 }
 
 func (o *orderRepo) CreateOrder(ctx context.Context, oo *biz.AdamaOrder) (*biz.AdamaOrder, error) {
+	workflow, err := o.loadWorkflow(ctx, oo.OrderId)
+	if err != nil {
+		return nil, err
+	}
+	if workflow.Status == seckill.OrderStatusCancelled || workflow.Status == seckill.OrderStatusTimeoutClosed {
+		return oo, nil
+	}
+	if workflow.SyncStatus == seckill.SyncStatusSynced {
+		return oo, nil
+	}
+	if workflow.Status != seckill.OrderStatusPendingPay || workflow.StockStatus != seckill.StockStatusReserved {
+		if err := o.runQueuedAdamaTCC(ctx, workflow); err != nil {
+			_ = o.data.db.WithContext(ctx).
+				Model(&AdamaOrderWorkflow{}).
+				Where("order_id = ?", oo.OrderId).
+				Updates(map[string]interface{}{
+					"last_error": err.Error(),
+					"updated_at": time.Now(),
+				}).Error
+			return nil, err
+		}
+	}
+
 	order := AdamaOrder{
 		UserId:  oo.UserId,
 		OrderId: oo.OrderId,
@@ -74,9 +99,12 @@ func (o *orderRepo) CreateOrder(ctx context.Context, oo *biz.AdamaOrder) (*biz.A
 		Model(&AdamaOrderWorkflow{}).
 		Where("order_id = ?", oo.OrderId).
 		Updates(map[string]interface{}{
-			"sync_status": seckill.SyncStatusSynced,
-			"last_error":  "",
-			"updated_at":  time.Now(),
+			"status":       seckill.OrderStatusPendingPay,
+			"stock_status": seckill.StockStatusReserved,
+			"cache_status": seckill.CacheStatusReserved,
+			"sync_status":  seckill.SyncStatusSynced,
+			"last_error":   "",
+			"updated_at":   time.Now(),
 		}).Error; err != nil {
 		return nil, err
 	}
@@ -92,7 +120,7 @@ func (o *orderRepo) CreateOrder(ctx context.Context, oo *biz.AdamaOrder) (*biz.A
 func (o *orderRepo) RepairPendingOrders(ctx context.Context, limit int) (int, error) {
 	var workflows []AdamaOrderWorkflow
 	if err := o.data.db.WithContext(ctx).
-		Where("status = ? AND sync_status <> ?", seckill.OrderStatusPendingPay, seckill.SyncStatusSynced).
+		Where("sync_status <> ? AND status IN ?", seckill.SyncStatusSynced, []string{seckill.OrderStatusPreparing, seckill.OrderStatusPendingPay}).
 		Order("updated_at ASC").
 		Limit(limit).
 		Find(&workflows).Error; err != nil {
@@ -192,6 +220,8 @@ func (o *orderRepo) closeOneExpired(ctx context.Context, workflow *AdamaOrderWor
 			return err
 		}
 		_ = o.data.rdb.Del(ctx, cache.AdamaGoodOverKey(workflow.GoodsID)).Err()
+		_ = o.data.rdb.SRem(ctx, cache.AdamaOrderUserSetKey(workflow.GoodsID), fmt.Sprintf("%d", workflow.UserID)).Err()
+		_ = o.data.rdb.Del(ctx, cache.AdamaOrderIdempotencyKey(workflow.UserID, workflow.GoodsID)).Err()
 		if err := o.data.db.WithContext(ctx).
 			Model(&AdamaOrderWorkflow{}).
 			Where("order_id = ?", workflow.OrderID).
@@ -235,6 +265,61 @@ func NewOrderRepo(data *Data, logger log.Logger) biz.OrderQueueRepo {
 		data: data,
 		log:  log.NewHelper(logger),
 	}
+}
+
+func (o *orderRepo) loadWorkflow(ctx context.Context, orderID int64) (*AdamaOrderWorkflow, error) {
+	var workflow AdamaOrderWorkflow
+	if err := o.data.db.WithContext(ctx).
+		Where("order_id = ?", orderID).
+		First(&workflow).Error; err != nil {
+		return nil, err
+	}
+	return &workflow, nil
+}
+
+type queuedOrderTCCRequest struct {
+	OrderID    int64     `json:"order_id"`
+	UserID     int64     `json:"user_id"`
+	GoodsID    int64     `json:"goods_id"`
+	Amount     int64     `json:"amount"`
+	StockToken string    `json:"stock_token"`
+	ExpireAt   time.Time `json:"expire_at"`
+}
+
+func (o *orderRepo) runQueuedAdamaTCC(ctx context.Context, workflow *AdamaOrderWorkflow) error {
+	dtmServer := envutil.Get("DTM_SERVER_URL", "http://127.0.0.1:36789/api/dtmsvr")
+	goodsSvcURL := envutil.Get("GOODS_SERVICE_URL", "http://127.0.0.1:8003")
+	orderSvcURL := envutil.Get("ORDER_SERVICE_URL", "http://127.0.0.1:8001")
+
+	gid, err := generateDTMGID(dtmServer)
+	if err != nil {
+		return err
+	}
+
+	req := &queuedOrderTCCRequest{
+		OrderID:    workflow.OrderID,
+		UserID:     workflow.UserID,
+		GoodsID:    workflow.GoodsID,
+		Amount:     workflow.Amount,
+		StockToken: workflow.StockToken,
+		ExpireAt:   workflow.ExpireAt,
+	}
+
+	return dtmcli.TccGlobalTransaction(dtmServer, gid, func(tcc *dtmcli.Tcc) (*rr.Response, error) {
+		if _, err := tcc.CallBranch(map[string]string{"sn": workflow.StockToken}, goodsSvcURL+"/ordersTry", goodsSvcURL+"/ordersConfirm", goodsSvcURL+"/ordersCancel"); err != nil {
+			return nil, err
+		}
+		return tcc.CallBranch(req, orderSvcURL+"/adama/tcc/order/try", orderSvcURL+"/adama/tcc/order/confirm", orderSvcURL+"/adama/tcc/order/cancel")
+	})
+}
+
+func generateDTMGID(server string) (string, error) {
+	res := map[string]string{}
+	resp, err := dtmcli.RestyClient.R().SetResult(&res).Get(server + "/newGid")
+	if err != nil || res["gid"] == "" {
+		return "", fmt.Errorf("generate dtm gid failed: %v, resp: %v", err, resp)
+	}
+	return res["gid"], nil
 }
 
 func callGoodsCancel(ctx context.Context, stockToken string) error {
