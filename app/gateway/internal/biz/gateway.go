@@ -6,6 +6,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/littleSand/adama/app/gateway/internal/data"
 	"github.com/littleSand/adama/app/gateway/internal/proxy"
+	"github.com/littleSand/adama/pkg/envutil"
 )
 
 type GatewayUsecase struct {
@@ -38,7 +39,14 @@ func NewGatewayUsecase(data *data.Data, logger log.Logger) *GatewayUsecase {
 		},
 	})
 
-	return &GatewayUsecase{handler: dispatcher}
+	handler := proxy.NewRateLimitHandler(dispatcher, proxy.RateLimitConfig{
+		GlobalRPS:         envutil.Int("GATEWAY_RATE_LIMIT_RPS", 300),
+		GlobalBurst:       envutil.Int("GATEWAY_RATE_LIMIT_BURST", 600),
+		GoodsHotspotRPS:   envutil.Int("GATEWAY_GOODS_HOTSPOT_RPS", 120),
+		GoodsHotspotBurst: envutil.Int("GATEWAY_GOODS_HOTSPOT_BURST", 240),
+	}, logger)
+
+	return &GatewayUsecase{handler: handler}
 }
 
 func (uc *GatewayUsecase) Handler() stdhttp.Handler {

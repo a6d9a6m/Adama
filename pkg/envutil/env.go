@@ -2,6 +2,7 @@ package envutil
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -30,4 +31,16 @@ func CSV(key string, fallback []string) []string {
 		return fallback
 	}
 	return items
+}
+
+func Int(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
