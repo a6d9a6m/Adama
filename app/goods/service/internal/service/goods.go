@@ -80,7 +80,7 @@ func (s *GoodsService) CreateOrdersConfirm(ctx context.Context, req *pb.CreateOr
 }
 
 // tcc-cancel
-func (s *GoodsService) CreateOrdersCancel(ctx context.Context, req *pb.CreateOrdersRequest) (*pb.CreateOrdersReply, error) {
+func (s *GoodsService) CreateOrdersTccCancel(ctx context.Context, req *pb.CreateOrdersRequest) (*pb.CreateOrdersReply, error) {
 	if err := s.oc.CancelStockReservation(ctx, req.Sn); err != nil {
 		return nil, err
 	}

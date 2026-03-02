@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/littleSand/adama/app/job/service/internal/biz"
@@ -13,11 +12,9 @@ type OrderService struct {
 	oc *biz.OrderQueueUsecase
 }
 
-func (s *OrderService) Create(ctx context.Context, m *biz.AdamaOrder) {
-	fmt.Println("service - create")
-	if _, err := s.oc.Create(ctx, m); err != nil {
-		fmt.Printf("create order failed: %v\n", err)
-	}
+func (s *OrderService) Create(ctx context.Context, m *biz.AdamaOrder) error {
+	_, err := s.oc.Create(ctx, m)
+	return err
 }
 
 // NewOrderService creates an order service.

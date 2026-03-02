@@ -51,6 +51,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 8
     networks:
       - adama
 
@@ -203,6 +204,10 @@ services:
       - go_build_cache:/root/.cache/go-build
     environment:
       KAFKA_BROKERS: kafka:9092
+      TASK_KAFKA_CONSUMERS: 8
+      TASK_REPAIR_LIMIT: 100
+      TASK_TIMEOUT_CLOSE_LIMIT: 200
+      TASK_STOCK_CHECK_LIMIT: 100
       GOODS_CANCEL_URL: http://goods:8003/ordersCancel
       DTM_SERVER_URL: http://dtm:36789/api/dtmsvr
       GOODS_SERVICE_URL: http://goods:8003

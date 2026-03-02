@@ -37,7 +37,7 @@ func init() {
 }
 
 type Server struct {
-	reader *kafka.Reader
+	readers []*kafka.Reader
 	topic  string
 	uo     *service.OrderService
 	rdb    *redis.Client
@@ -78,41 +78,20 @@ func NewMessage(key string, value []byte, header map[string]string) event2.Messa
 }
 
 func (s Server) Receive(ctx context.Context, handler event2.Handler) error {
-	go func() {
-		for {
-			m, err := s.reader.FetchMessage(context.Background())
-
-			if err != nil {
-				break
-			}
-			h := make(map[string]string)
-			if len(m.Headers) > 0 {
-				for _, header := range m.Headers {
-					h[header.Key] = string(header.Value)
-				}
-			}
-			err = handler(context.Background(), &Message{
-				key:    string(m.Key),
-				value:  m.Value,
-				header: h,
-			})
-			if err != nil {
-				s.log.Errorf("message handling failed: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
-			}
-			if err := s.reader.CommitMessages(ctx, m); err != nil {
-				s.log.Errorf("failed to commit message: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
-			}
-		}
-	}()
+	for _, reader := range s.readers {
+		go s.consumeLoop(ctx, reader, handler)
+	}
 	return nil
 }
 
 func (s Server) Close() error {
-	err := s.reader.Close()
-	if err != nil {
-		return err
+	var firstErr error
+	for _, reader := range s.readers {
+		if err := reader.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return nil
+	return firstErr
 }
 
 func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, logger klog.Logger) *Server {
@@ -121,32 +100,41 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 
 	address := envutil.CSV("KAFKA_BROKERS", []string{"192.168.0.111:9092"})
 	topic := "order"
+	consumerCount := envutil.Int("TASK_KAFKA_CONSUMERS", 8)
+	if consumerCount <= 0 {
+		consumerCount = 1
+	}
 
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  address,
-		GroupID:  "group-d",
-		Topic:    topic,
-		MinBytes: 1,    // 10kb
-		MaxBytes: 10e6, // 10mb
-	})
+	readers := make([]*kafka.Reader, 0, consumerCount)
+	for i := 0; i < consumerCount; i++ {
+		readers = append(readers, kafka.NewReader(kafka.ReaderConfig{
+			Brokers:        address,
+			GroupID:        "group-d",
+			Topic:          topic,
+			MinBytes:       1,
+			MaxBytes:       10e6,
+			CommitInterval: time.Second,
+			MaxWait:        100 * time.Millisecond,
+		}))
+	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         data.Redis.Addr,
 		WriteTimeout: data.Redis.WriteTimeout.AsDuration(),
 		ReadTimeout:  data.Redis.ReadTimeout.AsDuration(),
 	})
 	s := &Server{
-		reader: r,
-		topic:  topic,
-		uo:     uo,
-		rdb:    rdb,
-		log:    klog.NewHelper(klog.With(logger, "module", "job/server")),
+		readers: readers,
+		topic:   topic,
+		uo:      uo,
+		rdb:     rdb,
+		log:     klog.NewHelper(klog.With(logger, "module", "job/server")),
 	}
 	s.tasks = []scheduledTask{
 		{
 			name:     "order_sync_repair",
 			interval: 5 * time.Second,
 			run: func(ctx context.Context, _ time.Time) (string, error) {
-				repaired, err := s.uo.RepairPending(ctx, 20)
+				repaired, err := s.uo.RepairPending(ctx, envutil.Int("TASK_REPAIR_LIMIT", 100))
 				return fmt.Sprintf("repaired=%d", repaired), err
 			},
 		},
@@ -154,7 +142,7 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 			name:     "order_timeout_close",
 			interval: 5 * time.Second,
 			run: func(ctx context.Context, now time.Time) (string, error) {
-				closed, err := s.uo.CloseExpired(ctx, now, 20)
+				closed, err := s.uo.CloseExpired(ctx, now, envutil.Int("TASK_TIMEOUT_CLOSE_LIMIT", 200))
 				return fmt.Sprintf("closed=%d", closed), err
 			},
 		},
@@ -162,7 +150,7 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 			name:     "stock_consistency_check",
 			interval: 10 * time.Second,
 			run: func(ctx context.Context, _ time.Time) (string, error) {
-				mismatches, err := s.uo.CheckStockConsistency(ctx, 20)
+				mismatches, err := s.uo.CheckStockConsistency(ctx, envutil.Int("TASK_STOCK_CHECK_LIMIT", 100))
 				return fmt.Sprintf("mismatches=%d", mismatches), err
 			},
 		},
@@ -209,8 +197,9 @@ func (s Server) Start(ctx context.Context) error {
 			Amount:     amount,
 			StockToken: msg["stock_token"],
 		}
-		s.uo.Create(ctx, in)
-		fmt.Printf("key:%s, value:%s, header:%s\n", message.Key(), message.Value(), message.Header())
+		if err := s.uo.Create(ctx, in); err != nil {
+			return err
+		}
 		return nil
 	})
 
@@ -222,11 +211,7 @@ func (s Server) Start(ctx context.Context) error {
 }
 
 func (s Server) Stop(ctx context.Context) error {
-	err := s.reader.Close()
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.Close()
 }
 
 func (s Server) runTaskLoop(ctx context.Context, task scheduledTask) {
@@ -273,4 +258,31 @@ end
 return 0
 `
 	return s.rdb.Eval(ctx, script, []string{"JOB:TASK:LOCK:" + taskName}, token).Err()
+}
+
+func (s Server) consumeLoop(ctx context.Context, reader *kafka.Reader, handler event2.Handler) {
+	for {
+		m, err := reader.FetchMessage(context.Background())
+		if err != nil {
+			s.log.Errorf("kafka fetch failed: topic=%s err=%v", s.topic, err)
+			return
+		}
+		h := make(map[string]string)
+		if len(m.Headers) > 0 {
+			for _, header := range m.Headers {
+				h[header.Key] = string(header.Value)
+			}
+		}
+		err = handler(context.Background(), &Message{
+			key:    string(m.Key),
+			value:  m.Value,
+			header: h,
+		})
+		if err != nil {
+			s.log.Errorf("message handling failed: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
+		}
+		if err := reader.CommitMessages(ctx, m); err != nil {
+			s.log.Errorf("failed to commit message: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
+		}
+	}
 }

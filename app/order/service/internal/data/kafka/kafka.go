@@ -3,9 +3,11 @@ package kafka
 import (
 	"context"
 	"github.com/littleSand/adama/app/order/service/internal/data/kafka/event"
+	"github.com/segmentio/kafka-go/compress"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/protocol"
 	"log"
+	"time"
 )
 
 var _ event.Sender = (*kafkaSender)(nil)
@@ -74,9 +76,15 @@ func (k *kafkaSender) Close() error {
 
 func NewKafkaSender(address []string, topic string) (event.Sender, error) {
 	w := &kafka.Writer{
-		Topic: topic,
-		Addr: kafka.TCP(address...),
-		Balancer: &kafka.LeastBytes{},
+		Topic:         topic,
+		Addr:          kafka.TCP(address...),
+		Balancer:      &kafka.LeastBytes{},
+		BatchTimeout:  5 * time.Millisecond,
+		BatchSize:     1,
+		RequiredAcks:  kafka.RequireOne,
+		Compression:   compress.Snappy,
+		Async:         false,
+		Completion:    nil,
 	}
 	return &kafkaSender{writer: w, topic: topic}, nil
 }

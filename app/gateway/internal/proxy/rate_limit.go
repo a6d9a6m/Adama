@@ -50,7 +50,7 @@ func NewRateLimitHandler(next stdhttp.Handler, cfg RateLimitConfig, logger log.L
 }
 
 func (h *rateLimitHandler) ServeHTTP(writer stdhttp.ResponseWriter, request *stdhttp.Request) {
-	if h.globalLimiter != nil && !h.globalLimiter.Allow() {
+	if h.globalLimiter != nil && shouldApplyGlobalLimit(request) && !h.globalLimiter.Allow() {
 		h.log.Warnf("gateway global rate limited: method=%s path=%s", request.Method, request.URL.Path)
 		writeJSONError(writer, stdhttp.StatusServiceUnavailable, "gateway_rate_limited", "gateway global rate limit exceeded")
 		return
@@ -65,6 +65,11 @@ func (h *rateLimitHandler) ServeHTTP(writer stdhttp.ResponseWriter, request *std
 	}
 
 	h.next.ServeHTTP(writer, request)
+}
+
+func shouldApplyGlobalLimit(request *stdhttp.Request) bool {
+	path := request.URL.Path
+	return strings.HasPrefix(path, gatewayPrefix+"/adama/")
 }
 
 func (h *rateLimitHandler) allowGoods(goodsKey string) bool {
