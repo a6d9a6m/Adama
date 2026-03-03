@@ -2,6 +2,8 @@ package biz
 
 import (
 	"context"
+	"database/sql"
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/kratos/v2/log"
 	"time"
 )
@@ -23,6 +25,12 @@ type AdamaOrderRepo interface {
 	PrepareAdamaOrder(ctx context.Context, order *AdamaOrder) error
 	ConfirmAdamaOrder(ctx context.Context, order *AdamaOrder) error
 	CancelAdamaOrder(ctx context.Context, order *AdamaOrder) error
+	PrepareAdamaOrderTx(ctx context.Context, tx *sql.Tx, order *AdamaOrder) error
+	ConfirmAdamaOrderTx(ctx context.Context, tx *sql.Tx, order *AdamaOrder) error
+	CancelAdamaOrderTx(ctx context.Context, tx *sql.Tx, order *AdamaOrder) error
+	PrepareAdamaOrderBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *AdamaOrder) error
+	ConfirmAdamaOrderBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *AdamaOrder) error
+	CancelAdamaOrderBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *AdamaOrder) error
 	MarkOrderSyncResult(ctx context.Context, orderID int64, dispatchErr error) error
 	IssueSeckillToken(ctx context.Context, userID int64, goodsID int64, expireAt time.Time) (string, error)
 	ConsumeSeckillToken(ctx context.Context, userID int64, goodsID int64, token string) error
@@ -69,6 +77,18 @@ func (uc *AdamaOrderUsecase) Confirm(ctx context.Context, order *AdamaOrder) err
 
 func (uc *AdamaOrderUsecase) Cancel(ctx context.Context, order *AdamaOrder) error {
 	return uc.repo.CancelAdamaOrder(ctx, order)
+}
+
+func (uc *AdamaOrderUsecase) PrepareWithBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *AdamaOrder) error {
+	return uc.repo.PrepareAdamaOrderBarrier(ctx, barrier, order)
+}
+
+func (uc *AdamaOrderUsecase) ConfirmWithBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *AdamaOrder) error {
+	return uc.repo.ConfirmAdamaOrderBarrier(ctx, barrier, order)
+}
+
+func (uc *AdamaOrderUsecase) CancelWithBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *AdamaOrder) error {
+	return uc.repo.CancelAdamaOrderBarrier(ctx, barrier, order)
 }
 
 func (uc *AdamaOrderUsecase) MarkSyncResult(ctx context.Context, orderID int64, dispatchErr error) error {

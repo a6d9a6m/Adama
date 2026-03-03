@@ -11,7 +11,15 @@ services:
     environment:
       MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
 
-  task:
+  task-worker:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
+
+  task-timeout:
+    environment:
+      MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
+
+  task-scheduler:
     environment:
       MYSQL_DSN: root:${MYSQL_ROOT_PASSWORD:-Root@123456}@tcp(proxysql:6033)/order?parseTime=true
 

@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"time"
 
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/kratos/v2/log"
 	rr "github.com/go-resty/resty/v2"
 	"github.com/littleSand/adama/app/job/service/internal/biz"
 	"github.com/littleSand/adama/pkg/cache"
 	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/seckill"
-	"github.com/yedf/dtmcli"
 	"gorm.io/gorm/clause"
 )
 
@@ -315,7 +315,7 @@ func (o *orderRepo) runQueuedAdamaTCC(ctx context.Context, workflow *AdamaOrderW
 
 func generateDTMGID(server string) (string, error) {
 	res := map[string]string{}
-	resp, err := dtmcli.RestyClient.R().SetResult(&res).Get(server + "/newGid")
+	resp, err := dtmcli.GetRestyClient().R().SetResult(&res).Get(server + "/newGid")
 	if err != nil || res["gid"] == "" {
 		return "", fmt.Errorf("generate dtm gid failed: %v, resp: %v", err, resp)
 	}

@@ -19,9 +19,19 @@ docker compose up -d
 - user
 - goods
 - order
-- task
+- task-worker
+- task-timeout
+- task-scheduler
 - gateway
 - ops-ai
+
+## Task 服务拆分
+
+当前 `task` 已拆成 3 个小服务：
+
+- `task-worker`：只消费 Kafka `order` topic，异步执行建单链路
+- `task-timeout`：只处理超时未支付订单关闭和库存回补
+- `task-scheduler`：只处理修复、巡检和统计任务
 
 ## 开发覆盖
 

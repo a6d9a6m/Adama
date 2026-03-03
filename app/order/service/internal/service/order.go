@@ -7,15 +7,16 @@ import (
 	"strconv"
 	"time"
 
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/kratos/v2/errors"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	rr "github.com/go-resty/resty/v2"
 	pb "github.com/littleSand/adama/api/order/service/v1"
 	"github.com/littleSand/adama/app/order/service/internal/biz"
+	"github.com/littleSand/adama/pkg/dtmutil"
 	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/requestctx"
 	"github.com/littleSand/adama/pkg/seckill"
-	"github.com/yedf/dtmcli"
 )
 
 const headerSeckillToken = "X-Seckill-Token"
@@ -134,7 +135,11 @@ type AdamaOrderTCCRequest struct {
 }
 
 func (s *OrderService) HandleAdamaOrderTry(ctx context.Context, req *AdamaOrderTCCRequest) error {
-	return s.so.Prepare(ctx, &biz.AdamaOrder{
+	barrier, err := dtmutil.BarrierFromHTTPContext(ctx)
+	if err != nil {
+		return err
+	}
+	return s.so.PrepareWithBarrier(ctx, barrier, &biz.AdamaOrder{
 		UserId:     req.UserID,
 		OrderId:    req.OrderID,
 		GoodsId:    req.GoodsID,
@@ -145,7 +150,11 @@ func (s *OrderService) HandleAdamaOrderTry(ctx context.Context, req *AdamaOrderT
 }
 
 func (s *OrderService) HandleAdamaOrderConfirm(ctx context.Context, req *AdamaOrderTCCRequest) error {
-	return s.so.Confirm(ctx, &biz.AdamaOrder{
+	barrier, err := dtmutil.BarrierFromHTTPContext(ctx)
+	if err != nil {
+		return err
+	}
+	return s.so.ConfirmWithBarrier(ctx, barrier, &biz.AdamaOrder{
 		UserId:     req.UserID,
 		OrderId:    req.OrderID,
 		GoodsId:    req.GoodsID,
@@ -156,7 +165,11 @@ func (s *OrderService) HandleAdamaOrderConfirm(ctx context.Context, req *AdamaOr
 }
 
 func (s *OrderService) HandleAdamaOrderCancel(ctx context.Context, req *AdamaOrderTCCRequest) error {
-	return s.so.Cancel(ctx, &biz.AdamaOrder{
+	barrier, err := dtmutil.BarrierFromHTTPContext(ctx)
+	if err != nil {
+		return err
+	}
+	return s.so.CancelWithBarrier(ctx, barrier, &biz.AdamaOrder{
 		UserId:     req.UserID,
 		OrderId:    req.OrderID,
 		GoodsId:    req.GoodsID,
@@ -190,7 +203,7 @@ func (s *OrderService) runAdamaTCC(ctx context.Context, gid string, order *biz.A
 
 func generateDTMGID(server string) (string, error) {
 	res := map[string]string{}
-	resp, err := dtmcli.RestyClient.R().SetResult(&res).Get(server + "/newGid")
+	resp, err := dtmcli.GetRestyClient().R().SetResult(&res).Get(server + "/newGid")
 	if err != nil || res["gid"] == "" {
 		return "", errors.New(500, "DTM_UNAVAILABLE", fmt.Sprintf("generate dtm gid failed: %v, resp: %v", err, resp))
 	}

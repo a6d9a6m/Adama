@@ -27,7 +27,21 @@ services:
       - ./:/workspace
       - go_cache:/go/pkg/mod
 
-  task:
+  task-worker:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  task-timeout:
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./:/workspace
+      - go_cache:/go/pkg/mod
+
+  task-scheduler:
     environment:
       GO111MODULE: "on"
     volumes:

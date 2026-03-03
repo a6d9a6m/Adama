@@ -2,14 +2,13 @@ package service
 
 import (
 	"context"
-	"fmt"
 	stdhttp "net/http"
 	"strconv"
 
-	"github.com/go-kratos/kratos/v2/transport"
-	"github.com/go-kratos/kratos/v2/transport/http"
+	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	pb "github.com/littleSand/adama/api/goods/service/v1"
 	"github.com/littleSand/adama/app/goods/service/internal/biz"
+	"github.com/littleSand/adama/pkg/dtmutil"
 )
 
 func (s *GoodsService) GetGoods(ctx context.Context, req *pb.GetGoodsRequest) (*pb.GetGoodsReply, error) {
@@ -31,7 +30,6 @@ func (s *GoodsService) GetOrders(ctx context.Context, req *pb.GetOrdersRequest) 
 }
 
 func (s *GoodsService) CreateOrders(ctx context.Context, req *pb.CreateOrdersRequest) (*pb.CreateOrdersReply, error) {
-
 	err := s.oc.CreateOrders(ctx, biz.Orders{
 		Sn: req.Sn,
 	})
@@ -48,7 +46,11 @@ func (s *GoodsService) CreateOrders(ctx context.Context, req *pb.CreateOrdersReq
 
 // tcc-try
 func (s *GoodsService) CreateOrdersTccTry(ctx context.Context, req *pb.CreateOrdersRequest) (*pb.CreateOrdersReply, error) {
-	if err := s.oc.PrepareStockReservation(ctx, req.Sn); err != nil {
+	barrier, err := dtmutil.BarrierFromHTTPContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.oc.PrepareStockReservationBarrier(ctx, barrier, req.Sn); err != nil {
 		return nil, err
 	}
 	return &pb.CreateOrdersReply{
@@ -58,22 +60,13 @@ func (s *GoodsService) CreateOrdersTccTry(ctx context.Context, req *pb.CreateOrd
 
 // tcc-confirm
 func (s *GoodsService) CreateOrdersConfirm(ctx context.Context, req *pb.CreateOrdersRequest) (*pb.CreateOrdersReply, error) {
-	if err := s.oc.ConfirmStockReservation(ctx, req.Sn); err != nil {
+	barrier, err := dtmutil.BarrierFromHTTPContext(ctx)
+	if err != nil {
 		return nil, err
 	}
-	if tr, ok := transport.FromServerContext(ctx); ok {
-		// kind := tr.Kind().String()
-		// operation := tr.Operation()
-		// 断言成HTTP的Transport可以拿到特殊信息
-
-		if ht, ok := tr.(*http.Transport); ok {
-			fmt.Println("middleware: ", ht.Request().URL.Query())
-		}
-		// if ht, ok := tr.(*http.Tranport); ok {
-		// 	fmt.Println(ht.Request())
-		// }
+	if err := s.oc.ConfirmStockReservationBarrier(ctx, barrier, req.Sn); err != nil {
+		return nil, err
 	}
-
 	return &pb.CreateOrdersReply{
 		DtmResult: "SUCCESS",
 	}, nil
@@ -81,7 +74,11 @@ func (s *GoodsService) CreateOrdersConfirm(ctx context.Context, req *pb.CreateOr
 
 // tcc-cancel
 func (s *GoodsService) CreateOrdersTccCancel(ctx context.Context, req *pb.CreateOrdersRequest) (*pb.CreateOrdersReply, error) {
-	if err := s.oc.CancelStockReservation(ctx, req.Sn); err != nil {
+	barrier, err := dtmutil.BarrierFromHTTPContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.oc.CancelStockReservationBarrier(ctx, barrier, req.Sn); err != nil {
 		return nil, err
 	}
 	return &pb.CreateOrdersReply{
@@ -89,7 +86,7 @@ func (s *GoodsService) CreateOrdersTccCancel(ctx context.Context, req *pb.Create
 	}, nil
 }
 
-func (s *GoodsService) ListGoodsHTTP(ctx http.Context) error {
+func (s *GoodsService) ListGoodsHTTP(ctx khttp.Context) error {
 	page := goodsIntQuery(ctx.Request(), "page", 1)
 	pageSize := goodsIntQuery(ctx.Request(), "page_size", 10)
 	keyword := ctx.Request().URL.Query().Get("keyword")

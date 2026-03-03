@@ -10,7 +10,6 @@ import (
 	"github.com/littleSand/adama/app/goods/service/internal/conf"
 	"github.com/littleSand/adama/app/goods/service/internal/data/ent"
 	"github.com/littleSand/adama/pkg/envutil"
-	"github.com/yedf/dtmcli"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -42,22 +41,19 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 		return nil, nil, err
 	}
 
-	var dbSQLDTMConf = map[string]string{
-		"driver":   conf.Database.Driver,
-		"host":     envutil.Get("DTM_DB_HOST", "192.168.0.111"),
-		"user":     "root",
-		"password": "Root@123456",
-		"port":     envutil.Get("DTM_DB_PORT", "3307"),
-		"database": "goods",
+	dbSQLDTM, err := sql.Open(conf.Database.Driver, databaseSource)
+	if err != nil {
+		return nil, nil, err
 	}
-	dbSQLDTM, err := dtmcli.SdbGet(dbSQLDTMConf)
-	dtmcli.FatalIfError(err)
 
 	d := &Data{
 		db:  client,
 		sql: dbSQLDTM,
 	}
 	if err := ensureStockReservationSchema(d.sql); err != nil {
+		return nil, nil, err
+	}
+	if err := ensureDTMBarrierSchema(d.sql); err != nil {
 		return nil, nil, err
 	}
 	return d, func() {
@@ -83,9 +79,22 @@ func ensureStockReservationSchema(db *sql.DB) error {
 	return nil
 }
 
-// BeginTx starts a mysql transaction for dtm integration.
-func BeginTx(db *sql.DB) *sql.Tx {
-	tx, err := db.Begin()
-	dtmcli.FatalIfError(err)
-	return tx
+func ensureDTMBarrierSchema(db *sql.DB) error {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS dtm_barrier.barrier (
+		id BIGINT(22) NOT NULL AUTO_INCREMENT,
+		trans_type VARCHAR(45) NOT NULL,
+		gid VARCHAR(128) NOT NULL,
+		branch_id VARCHAR(128) NOT NULL,
+		op VARCHAR(45) NOT NULL,
+		barrier_id VARCHAR(45) NOT NULL,
+		reason VARCHAR(45) NOT NULL,
+		create_time DATETIME DEFAULT NULL,
+		update_time DATETIME DEFAULT NULL,
+		PRIMARY KEY (id),
+		UNIQUE KEY uniq_barrier (trans_type, gid, branch_id, op, barrier_id)
+	)`)
+	if err != nil {
+		return fmt.Errorf("ensure dtm barrier schema: %w", err)
+	}
+	return nil
 }

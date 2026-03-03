@@ -37,12 +37,13 @@ func init() {
 }
 
 type Server struct {
+	role    string
 	readers []*kafka.Reader
-	topic  string
-	uo     *service.OrderService
-	rdb    *redis.Client
-	log    *klog.Helper
-	tasks  []scheduledTask
+	topic   string
+	uo      *service.OrderService
+	rdb     *redis.Client
+	log     *klog.Helper
+	tasks   []scheduledTask
 }
 
 type scheduledTask struct {
@@ -95,113 +96,81 @@ func (s Server) Close() error {
 }
 
 func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, logger klog.Logger) *Server {
-
-	// []string{"192.168.2.27:9092"}, "order"
-
+	role := envutil.Get("JOB_ROLE", "worker")
 	address := envutil.CSV("KAFKA_BROKERS", []string{"192.168.0.111:9092"})
 	topic := "order"
-	consumerCount := envutil.Int("TASK_KAFKA_CONSUMERS", 8)
-	if consumerCount <= 0 {
-		consumerCount = 1
+
+	var readers []*kafka.Reader
+	if role == "worker" {
+		consumerCount := envutil.Int("TASK_KAFKA_CONSUMERS", 8)
+		if consumerCount <= 0 {
+			consumerCount = 1
+		}
+		readers = make([]*kafka.Reader, 0, consumerCount)
+		for i := 0; i < consumerCount; i++ {
+			readers = append(readers, kafka.NewReader(kafka.ReaderConfig{
+				Brokers:        address,
+				GroupID:        "group-d",
+				Topic:          topic,
+				MinBytes:       1,
+				MaxBytes:       10e6,
+				CommitInterval: time.Second,
+				MaxWait:        100 * time.Millisecond,
+			}))
+		}
 	}
 
-	readers := make([]*kafka.Reader, 0, consumerCount)
-	for i := 0; i < consumerCount; i++ {
-		readers = append(readers, kafka.NewReader(kafka.ReaderConfig{
-			Brokers:        address,
-			GroupID:        "group-d",
-			Topic:          topic,
-			MinBytes:       1,
-			MaxBytes:       10e6,
-			CommitInterval: time.Second,
-			MaxWait:        100 * time.Millisecond,
-		}))
-	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         data.Redis.Addr,
 		WriteTimeout: data.Redis.WriteTimeout.AsDuration(),
 		ReadTimeout:  data.Redis.ReadTimeout.AsDuration(),
 	})
 	s := &Server{
+		role:    role,
 		readers: readers,
 		topic:   topic,
 		uo:      uo,
 		rdb:     rdb,
-		log:     klog.NewHelper(klog.With(logger, "module", "job/server")),
+		log:     klog.NewHelper(klog.With(logger, "module", "job/server", "role", role)),
 	}
-	s.tasks = []scheduledTask{
-		{
-			name:     "order_sync_repair",
-			interval: 5 * time.Second,
-			run: func(ctx context.Context, _ time.Time) (string, error) {
-				repaired, err := s.uo.RepairPending(ctx, envutil.Int("TASK_REPAIR_LIMIT", 100))
-				return fmt.Sprintf("repaired=%d", repaired), err
-			},
-		},
-		{
-			name:     "order_timeout_close",
-			interval: 5 * time.Second,
-			run: func(ctx context.Context, now time.Time) (string, error) {
-				closed, err := s.uo.CloseExpired(ctx, now, envutil.Int("TASK_TIMEOUT_CLOSE_LIMIT", 200))
-				return fmt.Sprintf("closed=%d", closed), err
-			},
-		},
-		{
-			name:     "stock_consistency_check",
-			interval: 10 * time.Second,
-			run: func(ctx context.Context, _ time.Time) (string, error) {
-				mismatches, err := s.uo.CheckStockConsistency(ctx, envutil.Int("TASK_STOCK_CHECK_LIMIT", 100))
-				return fmt.Sprintf("mismatches=%d", mismatches), err
-			},
-		},
-		{
-			name:     "cleanup_stats",
-			interval: 15 * time.Second,
-			run: func(ctx context.Context, _ time.Time) (string, error) {
-				stats, err := s.uo.CollectWorkflowStats(ctx)
-				return fmt.Sprintf("stats=%v", stats), err
-			},
-		},
-	}
+	s.tasks = buildTasksByRole(s)
 	return s
 }
 
 func (s Server) Start(ctx context.Context) error {
-	fmt.Printf("job-job start")
+	fmt.Printf("job-job start role=%s", s.role)
 
-	//in := &v1.HelloRequest{
-	//	Name: "kratos",
-	//}
-	//s.t.SayHello(ctx, in)
+	if len(s.readers) > 0 {
+		s.Receive(ctx, func(ctx context.Context, message event2.Message) error {
+			msg := message.Header()
 
-	s.Receive(ctx, func(ctx context.Context, message event2.Message) error {
-		//TODO::路由解析 根据不同的key调用不同的业务逻辑处理
+			uid, err := strconv.ParseInt(msg["uid"], 10, 64)
+			if err != nil {
+				return err
+			}
+			gid, err := strconv.ParseInt(msg["goods_id"], 10, 64)
+			if err != nil {
+				return err
+			}
+			oid, err := strconv.ParseInt(msg["order_id"], 10, 64)
+			if err != nil {
+				return err
+			}
+			amount, err := strconv.ParseInt(msg["amount"], 10, 64)
+			if err != nil {
+				return err
+			}
 
-		msg := message.Header()
-
-		//fmt.Println(msg["uid"])
-
-		uid, err := strconv.ParseInt(msg["uid"], 10, 64)
-		gid, err := strconv.ParseInt(msg["goods_id"], 10, 64)
-		oid, err := strconv.ParseInt(msg["order_id"], 10, 64)
-		amount, err := strconv.ParseInt(msg["amount"], 10, 64)
-
-		if err != nil {
-			return err
-		}
-
-		in := &biz.AdamaOrder{
-			OrderId:    oid,
-			UserId:     uid,
-			GoodsId:    gid,
-			Amount:     amount,
-			StockToken: msg["stock_token"],
-		}
-		if err := s.uo.Create(ctx, in); err != nil {
-			return err
-		}
-		return nil
-	})
+			in := &biz.AdamaOrder{
+				OrderId:    oid,
+				UserId:     uid,
+				GoodsId:    gid,
+				Amount:     amount,
+				StockToken: msg["stock_token"],
+			}
+			return s.uo.Create(ctx, in)
+		})
+	}
 
 	for _, task := range s.tasks {
 		go s.runTaskLoop(ctx, task)
@@ -284,5 +253,50 @@ func (s Server) consumeLoop(ctx context.Context, reader *kafka.Reader, handler e
 		if err := reader.CommitMessages(ctx, m); err != nil {
 			s.log.Errorf("failed to commit message: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
 		}
+	}
+}
+
+func buildTasksByRole(s *Server) []scheduledTask {
+	switch s.role {
+	case "timeout":
+		return []scheduledTask{
+			{
+				name:     "order_timeout_close",
+				interval: 5 * time.Second,
+				run: func(ctx context.Context, now time.Time) (string, error) {
+					closed, err := s.uo.CloseExpired(ctx, now, envutil.Int("TASK_TIMEOUT_CLOSE_LIMIT", 200))
+					return fmt.Sprintf("closed=%d", closed), err
+				},
+			},
+		}
+	case "scheduler":
+		return []scheduledTask{
+			{
+				name:     "order_sync_repair",
+				interval: 5 * time.Second,
+				run: func(ctx context.Context, _ time.Time) (string, error) {
+					repaired, err := s.uo.RepairPending(ctx, envutil.Int("TASK_REPAIR_LIMIT", 100))
+					return fmt.Sprintf("repaired=%d", repaired), err
+				},
+			},
+			{
+				name:     "stock_consistency_check",
+				interval: 10 * time.Second,
+				run: func(ctx context.Context, _ time.Time) (string, error) {
+					mismatches, err := s.uo.CheckStockConsistency(ctx, envutil.Int("TASK_STOCK_CHECK_LIMIT", 100))
+					return fmt.Sprintf("mismatches=%d", mismatches), err
+				},
+			},
+			{
+				name:     "cleanup_stats",
+				interval: 15 * time.Second,
+				run: func(ctx context.Context, _ time.Time) (string, error) {
+					stats, err := s.uo.CollectWorkflowStats(ctx)
+					return fmt.Sprintf("stats=%v", stats), err
+				},
+			},
+		}
+	default:
+		return nil
 	}
 }

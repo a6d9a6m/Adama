@@ -2,7 +2,9 @@ package biz
 
 import (
 	"context"
+	"database/sql"
 
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/kratos/v2/log"
 )
 
@@ -41,6 +43,12 @@ type OrdersRepo interface {
 	PrepareStockReservation(ctx context.Context, sn string) error
 	ConfirmStockReservation(ctx context.Context, sn string) error
 	CancelStockReservation(ctx context.Context, sn string) error
+	PrepareStockReservationTx(ctx context.Context, tx *sql.Tx, sn string) error
+	ConfirmStockReservationTx(ctx context.Context, tx *sql.Tx, sn string) error
+	CancelStockReservationTx(ctx context.Context, tx *sql.Tx, sn string) error
+	PrepareStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error
+	ConfirmStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error
+	CancelStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error
 }
 
 // 提供给service调用的方法
@@ -62,4 +70,16 @@ func (m *OrdersUsecase) ConfirmStockReservation(ctx context.Context, sn string) 
 
 func (m *OrdersUsecase) CancelStockReservation(ctx context.Context, sn string) error {
 	return m.repo.CancelStockReservation(ctx, sn)
+}
+
+func (m *OrdersUsecase) PrepareStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error {
+	return m.repo.PrepareStockReservationBarrier(ctx, barrier, sn)
+}
+
+func (m *OrdersUsecase) ConfirmStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error {
+	return m.repo.ConfirmStockReservationBarrier(ctx, barrier, sn)
+}
+
+func (m *OrdersUsecase) CancelStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error {
+	return m.repo.CancelStockReservationBarrier(ctx, barrier, sn)
 }

@@ -25,10 +25,20 @@ scrape_configs:
     static_configs:
       - targets: ["order:8001"]
 
-  - job_name: "task"
+  - job_name: "task-worker"
     metrics_path: /metrics
     static_configs:
-      - targets: ["task:8004"]
+      - targets: ["task-worker:8004"]
+
+  - job_name: "task-timeout"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["task-timeout:8004"]
+
+  - job_name: "task-scheduler"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["task-scheduler:8004"]
 
   - job_name: "mysql"
     static_configs:

@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"time"
 
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	rr "github.com/go-resty/resty/v2"
 	"github.com/littleSand/adama/app/goods/service/internal/biz"
 	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/seckill"
-	"github.com/yedf/dtmcli"
 )
 
 var _ biz.OrdersRepo = (*ordersRepo)(nil)
@@ -76,11 +76,6 @@ func (m ordersRepo) CreateOrders(ctx context.Context, orders biz.Orders) error {
 }
 
 func (m ordersRepo) PrepareStockReservation(ctx context.Context, sn string) error {
-	token, err := seckill.ParseStockToken(sn)
-	if err != nil {
-		return err
-	}
-
 	tx, err := m.data.sql.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -90,13 +85,24 @@ func (m ordersRepo) PrepareStockReservation(ctx context.Context, sn string) erro
 			_ = tx.Rollback()
 		}
 	}()
+	if err = m.PrepareStockReservationTx(ctx, tx, sn); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m ordersRepo) PrepareStockReservationTx(ctx context.Context, tx *sql.Tx, sn string) error {
+	token, err := seckill.ParseStockToken(sn)
+	if err != nil {
+		return err
+	}
 
 	var status string
-	row := tx.QueryRowContext(ctx, "SELECT status FROM adama_stock_reservations WHERE order_id = ?", token.OrderID)
+	row := tx.QueryRowContext(ctx, "SELECT status FROM adama_stock_reservations WHERE order_id = ? FOR UPDATE", token.OrderID)
 	switch scanErr := row.Scan(&status); scanErr {
 	case nil:
 		if status == seckill.StockStatusReserved {
-			return tx.Commit()
+			return nil
 		}
 		if status == seckill.StockStatusReleased {
 			return errors.New(500, "STOCK_RESERVATION_RELEASED", "stock reservation already released")
@@ -135,29 +141,16 @@ func (m ordersRepo) PrepareStockReservation(ctx context.Context, sn string) erro
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
+}
+
+func (m ordersRepo) PrepareStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error {
+	return barrier.CallWithDB(m.data.sql, func(tx *sql.Tx) error {
+		return m.PrepareStockReservationTx(ctx, tx, sn)
+	})
 }
 
 func (m ordersRepo) ConfirmStockReservation(ctx context.Context, sn string) error {
-	token, err := seckill.ParseStockToken(sn)
-	if err != nil {
-		return err
-	}
-	_, err = m.data.sql.ExecContext(ctx, `
-		UPDATE adama_stock_reservations
-		SET status = ?, updated_at = ?
-		WHERE order_id = ?`,
-		seckill.StockStatusReserved, time.Now(), token.OrderID,
-	)
-	return err
-}
-
-func (m ordersRepo) CancelStockReservation(ctx context.Context, sn string) error {
-	token, err := seckill.ParseStockToken(sn)
-	if err != nil {
-		return err
-	}
-
 	tx, err := m.data.sql.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -167,9 +160,56 @@ func (m ordersRepo) CancelStockReservation(ctx context.Context, sn string) error
 			_ = tx.Rollback()
 		}
 	}()
+	if err = m.ConfirmStockReservationTx(ctx, tx, sn); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m ordersRepo) ConfirmStockReservationTx(ctx context.Context, tx *sql.Tx, sn string) error {
+	token, err := seckill.ParseStockToken(sn)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE adama_stock_reservations
+		SET status = ?, updated_at = ?
+		WHERE order_id = ?`,
+		seckill.StockStatusReserved, time.Now(), token.OrderID,
+	)
+	return err
+}
+
+func (m ordersRepo) ConfirmStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error {
+	return barrier.CallWithDB(m.data.sql, func(tx *sql.Tx) error {
+		return m.ConfirmStockReservationTx(ctx, tx, sn)
+	})
+}
+
+func (m ordersRepo) CancelStockReservation(ctx context.Context, sn string) error {
+	tx, err := m.data.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if err = m.CancelStockReservationTx(ctx, tx, sn); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m ordersRepo) CancelStockReservationTx(ctx context.Context, tx *sql.Tx, sn string) error {
+	token, err := seckill.ParseStockToken(sn)
+	if err != nil {
+		return err
+	}
 
 	var status string
-	row := tx.QueryRowContext(ctx, "SELECT status FROM adama_stock_reservations WHERE order_id = ?", token.OrderID)
+	row := tx.QueryRowContext(ctx, "SELECT status FROM adama_stock_reservations WHERE order_id = ? FOR UPDATE", token.OrderID)
 	switch scanErr := row.Scan(&status); scanErr {
 	case sql.ErrNoRows:
 		return nil
@@ -178,7 +218,7 @@ func (m ordersRepo) CancelStockReservation(ctx context.Context, sn string) error
 		return scanErr
 	}
 	if status == seckill.StockStatusReleased {
-		return tx.Commit()
+		return nil
 	}
 
 	if _, err = tx.ExecContext(ctx, `
@@ -197,14 +237,18 @@ func (m ordersRepo) CancelStockReservation(ctx context.Context, sn string) error
 	); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
+}
+
+func (m ordersRepo) CancelStockReservationBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, sn string) error {
+	return barrier.CallWithDB(m.data.sql, func(tx *sql.Tx) error {
+		return m.CancelStockReservationTx(ctx, tx, sn)
+	})
 }
 
 func (m ordersRepo) CreateOrdersConfirm() (interface{}, error) {
-	res := dtmcli.OrString("ok", "happy", "SUCCESS")
 	type M = map[string]interface{}
-
-	return M{"dtm_result": res}, nil
+	return M{"dtm_result": "SUCCESS"}, nil
 }
 
 func (m ordersRepo) UpdateOrders(ctx context.Context, orders biz.Orders) error {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/snowflake"
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
@@ -123,11 +124,27 @@ func (s adamaOrderRepo) ReserveSeckillOrder(ctx context.Context, order *biz.Adam
 }
 
 func (s adamaOrderRepo) PrepareAdamaOrder(ctx context.Context, order *biz.AdamaOrder) error {
+	tx, err := s.data.msql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if err = s.PrepareAdamaOrderTx(ctx, tx, order); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s adamaOrderRepo) PrepareAdamaOrderTx(ctx context.Context, tx *sql.Tx, order *biz.AdamaOrder) error {
 	now := time.Now()
 	if order.Amount <= 0 {
 		order.Amount = 1
 	}
-	_, err := s.data.msql.ExecContext(ctx, `
+	_, err := tx.ExecContext(ctx, `
 		INSERT INTO adama_order_workflows
 			(order_id, user_id, goods_id, amount, stock_token, status, stock_status, cache_status, sync_status, expire_at, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -145,8 +162,30 @@ func (s adamaOrderRepo) PrepareAdamaOrder(ctx context.Context, order *biz.AdamaO
 	return err
 }
 
+func (s adamaOrderRepo) PrepareAdamaOrderBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *biz.AdamaOrder) error {
+	return barrier.CallWithDB(s.data.msql, func(tx *sql.Tx) error {
+		return s.PrepareAdamaOrderTx(ctx, tx, order)
+	})
+}
+
 func (s adamaOrderRepo) ConfirmAdamaOrder(ctx context.Context, order *biz.AdamaOrder) error {
-	_, err := s.data.msql.ExecContext(ctx, `
+	tx, err := s.data.msql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if err = s.ConfirmAdamaOrderTx(ctx, tx, order); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s adamaOrderRepo) ConfirmAdamaOrderTx(ctx context.Context, tx *sql.Tx, order *biz.AdamaOrder) error {
+	_, err := tx.ExecContext(ctx, `
 		UPDATE adama_order_workflows
 		SET status = ?, stock_status = ?, cache_status = ?, sync_status = ?, updated_at = ?
 		WHERE order_id = ?`,
@@ -154,6 +193,12 @@ func (s adamaOrderRepo) ConfirmAdamaOrder(ctx context.Context, order *biz.AdamaO
 		time.Now(), order.OrderId,
 	)
 	return err
+}
+
+func (s adamaOrderRepo) ConfirmAdamaOrderBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *biz.AdamaOrder) error {
+	return barrier.CallWithDB(s.data.msql, func(tx *sql.Tx) error {
+		return s.ConfirmAdamaOrderTx(ctx, tx, order)
+	})
 }
 
 func (s adamaOrderRepo) CancelAdamaOrder(ctx context.Context, order *biz.AdamaOrder) error {
@@ -166,8 +211,14 @@ func (s adamaOrderRepo) CancelAdamaOrder(ctx context.Context, order *biz.AdamaOr
 			_ = tx.Rollback()
 		}
 	}()
+	if err = s.CancelAdamaOrderTx(ctx, tx, order); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
-	workflow, err := loadWorkflow(ctx, tx, order.OrderId)
+func (s adamaOrderRepo) CancelAdamaOrderTx(ctx context.Context, tx *sql.Tx, order *biz.AdamaOrder) error {
+	workflow, err := loadWorkflowForUpdate(ctx, tx, order.OrderId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
@@ -193,7 +244,13 @@ func (s adamaOrderRepo) CancelAdamaOrder(ctx context.Context, order *biz.AdamaOr
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
+}
+
+func (s adamaOrderRepo) CancelAdamaOrderBarrier(ctx context.Context, barrier *dtmcli.BranchBarrier, order *biz.AdamaOrder) error {
+	return barrier.CallWithDB(s.data.msql, func(tx *sql.Tx) error {
+		return s.CancelAdamaOrderTx(ctx, tx, order)
+	})
 }
 
 func (s adamaOrderRepo) MarkOrderSyncResult(ctx context.Context, orderID int64, dispatchErr error) error {
@@ -324,6 +381,30 @@ func loadWorkflow(ctx context.Context, querier interface {
 		SELECT order_id, user_id, goods_id, amount, stock_token, status, stock_status, cache_status, sync_status
 		FROM adama_order_workflows
 		WHERE order_id = ?`, orderID)
+
+	record := &workflowRecord{}
+	err := row.Scan(
+		&record.OrderID,
+		&record.UserID,
+		&record.GoodsID,
+		&record.Amount,
+		&record.StockToken,
+		&record.Status,
+		&record.StockStatus,
+		&record.CacheStatus,
+		&record.SyncStatus,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return record, nil
+}
+
+func loadWorkflowForUpdate(ctx context.Context, tx *sql.Tx, orderID int64) (*workflowRecord, error) {
+	row := tx.QueryRowContext(ctx, `
+		SELECT order_id, user_id, goods_id, amount, stock_token, status, stock_status, cache_status, sync_status
+		FROM adama_order_workflows
+		WHERE order_id = ? FOR UPDATE`, orderID)
 
 	record := &workflowRecord{}
 	err := row.Scan(

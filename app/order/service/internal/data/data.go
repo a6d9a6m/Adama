@@ -114,6 +114,9 @@ func NewData(conf *conf.Data, logger log.Logger, rr *registry.Registry) (*Data, 
 	if err := ensureOrderWorkflowSchema(d.msql); err != nil {
 		return nil, nil, err
 	}
+	if err := ensureDTMBarrierSchema(d.msql); err != nil {
+		return nil, nil, err
+	}
 	return d, func() {
 		if err := d.db.Close(); err != nil {
 			log.Error(err)
@@ -148,6 +151,26 @@ func ensureOrderWorkflowSchema(db *sql.DB) error {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("ensure order workflow schema: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureDTMBarrierSchema(db *sql.DB) error {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS dtm_barrier.barrier (
+		id BIGINT(22) NOT NULL AUTO_INCREMENT,
+		trans_type VARCHAR(45) NOT NULL,
+		gid VARCHAR(128) NOT NULL,
+		branch_id VARCHAR(128) NOT NULL,
+		op VARCHAR(45) NOT NULL,
+		barrier_id VARCHAR(45) NOT NULL,
+		reason VARCHAR(45) NOT NULL,
+		create_time DATETIME DEFAULT NULL,
+		update_time DATETIME DEFAULT NULL,
+		PRIMARY KEY (id),
+		UNIQUE KEY uniq_barrier (trans_type, gid, branch_id, op, barrier_id)
+	)`)
+	if err != nil {
+		return fmt.Errorf("ensure dtm barrier schema: %w", err)
 	}
 	return nil
 }

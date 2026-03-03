@@ -182,3 +182,17 @@ CREATE TABLE IF NOT EXISTS kv (
   PRIMARY KEY (id),
   UNIQUE KEY uk_cat_k (cat, k)
 );
+
+CREATE TABLE IF NOT EXISTS barrier (
+  id BIGINT(22) NOT NULL AUTO_INCREMENT,
+  trans_type VARCHAR(45) NOT NULL,
+  gid VARCHAR(128) NOT NULL,
+  branch_id VARCHAR(128) NOT NULL,
+  op VARCHAR(45) NOT NULL,
+  barrier_id VARCHAR(45) NOT NULL,
+  reason VARCHAR(45) NOT NULL,
+  create_time DATETIME DEFAULT NULL,
+  update_time DATETIME DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uniq_barrier (trans_type, gid, branch_id, op, barrier_id)
+);
