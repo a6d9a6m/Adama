@@ -36,3 +36,10 @@ com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
 fabric.properties
+
+# others
+/plan.md
+/test_plan.md
+.VSCodeCounter/
+benchmarks/tmp/
+benchmarks/wrk/results/raw/
