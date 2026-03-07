@@ -15,6 +15,7 @@ import (
 	"github.com/littleSand/adama/app/job/service/internal/conf"
 	"github.com/littleSand/adama/app/job/service/internal/service"
 	"github.com/littleSand/adama/pkg/envutil"
+	"github.com/littleSand/adama/pkg/poolutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 )
@@ -37,13 +38,16 @@ func init() {
 }
 
 type Server struct {
-	role    string
-	readers []*kafka.Reader
-	topic   string
-	uo      *service.OrderService
-	rdb     *redis.Client
-	log     *klog.Helper
-	tasks   []scheduledTask
+	role        string
+	readers     []*kafka.Reader
+	topic       string
+	uo          *service.OrderService
+	rdb         *redis.Client
+	log         *klog.Helper
+	tasks       []scheduledTask
+	workerCount int
+	queueSize   int
+	workQueue   chan consumeJob
 }
 
 type scheduledTask struct {
@@ -56,6 +60,12 @@ type Message struct {
 	key    string
 	value  []byte
 	header map[string]string
+}
+
+type consumeJob struct {
+	reader  *kafka.Reader
+	message kafka.Message
+	payload *Message
 }
 
 func (m *Message) Key() string {
@@ -79,8 +89,14 @@ func NewMessage(key string, value []byte, header map[string]string) event2.Messa
 }
 
 func (s Server) Receive(ctx context.Context, handler event2.Handler) error {
+	if len(s.readers) == 0 {
+		return nil
+	}
+	for i := 0; i < s.workerCount; i++ {
+		go s.workerLoop(ctx, handler, i)
+	}
 	for _, reader := range s.readers {
-		go s.consumeLoop(ctx, reader, handler)
+		go s.consumeLoop(ctx, reader)
 	}
 	return nil
 }
@@ -120,28 +136,44 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 		}
 	}
 
-	rdb := redis.NewClient(&redis.Options{
+	redisOptions := &redis.Options{
 		Addr:         data.Redis.Addr,
 		WriteTimeout: data.Redis.WriteTimeout.AsDuration(),
 		ReadTimeout:  data.Redis.ReadTimeout.AsDuration(),
-	})
+	}
+	poolutil.ConfigureRedisOptions(redisOptions, "TASK")
+	rdb := redis.NewClient(redisOptions)
 	s := &Server{
-		role:    role,
-		readers: readers,
-		topic:   topic,
-		uo:      uo,
-		rdb:     rdb,
-		log:     klog.NewHelper(klog.With(logger, "module", "job/server", "role", role)),
+		role:        role,
+		readers:     readers,
+		topic:       topic,
+		uo:          uo,
+		rdb:         rdb,
+		log:         klog.NewHelper(klog.With(logger, "module", "job/server", "role", role)),
+		workerCount: envutil.Int("TASK_KAFKA_WORKERS", 12),
+		queueSize:   envutil.Int("TASK_KAFKA_QUEUE_SIZE", 1280),
+	}
+	if s.workerCount <= 0 {
+		s.workerCount = len(readers)
+		if s.workerCount <= 0 {
+			s.workerCount = 1
+		}
+	}
+	if s.queueSize <= 0 {
+		s.queueSize = s.workerCount * 64
+	}
+	if len(readers) > 0 {
+		s.workQueue = make(chan consumeJob, s.queueSize)
 	}
 	s.tasks = buildTasksByRole(s)
 	return s
 }
 
 func (s Server) Start(ctx context.Context) error {
-	fmt.Printf("job-job start role=%s", s.role)
+	s.log.Infof("job server start role=%s readers=%d workers=%d queue=%d", s.role, len(s.readers), s.workerCount, s.queueSize)
 
 	if len(s.readers) > 0 {
-		s.Receive(ctx, func(ctx context.Context, message event2.Message) error {
+		if err := s.Receive(ctx, func(ctx context.Context, message event2.Message) error {
 			msg := message.Header()
 
 			uid, err := strconv.ParseInt(msg["uid"], 10, 64)
@@ -169,7 +201,9 @@ func (s Server) Start(ctx context.Context) error {
 				StockToken: msg["stock_token"],
 			}
 			return s.uo.Create(ctx, in)
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	for _, task := range s.tasks {
@@ -229,10 +263,13 @@ return 0
 	return s.rdb.Eval(ctx, script, []string{"JOB:TASK:LOCK:" + taskName}, token).Err()
 }
 
-func (s Server) consumeLoop(ctx context.Context, reader *kafka.Reader, handler event2.Handler) {
+func (s Server) consumeLoop(ctx context.Context, reader *kafka.Reader) {
 	for {
-		m, err := reader.FetchMessage(context.Background())
+		m, err := reader.FetchMessage(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			s.log.Errorf("kafka fetch failed: topic=%s err=%v", s.topic, err)
 			return
 		}
@@ -242,16 +279,36 @@ func (s Server) consumeLoop(ctx context.Context, reader *kafka.Reader, handler e
 				h[header.Key] = string(header.Value)
 			}
 		}
-		err = handler(context.Background(), &Message{
-			key:    string(m.Key),
-			value:  m.Value,
-			header: h,
-		})
-		if err != nil {
-			s.log.Errorf("message handling failed: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
+		job := consumeJob{
+			reader:  reader,
+			message: m,
+			payload: &Message{
+				key:    string(m.Key),
+				value:  m.Value,
+				header: h,
+			},
 		}
-		if err := reader.CommitMessages(ctx, m); err != nil {
-			s.log.Errorf("failed to commit message: topic=%s partition=%d offset=%d err=%v", m.Topic, m.Partition, m.Offset, err)
+		select {
+		case <-ctx.Done():
+			return
+		case s.workQueue <- job:
+		}
+	}
+}
+
+func (s Server) workerLoop(ctx context.Context, handler event2.Handler, workerID int) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case job := <-s.workQueue:
+			err := handler(ctx, job.payload)
+			if err != nil {
+				s.log.Errorf("message handling failed: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)
+			}
+			if err := job.reader.CommitMessages(ctx, job.message); err != nil {
+				s.log.Errorf("failed to commit message: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)
+			}
 		}
 	}
 }

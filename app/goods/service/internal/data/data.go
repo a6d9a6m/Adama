@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"
 	"github.com/littleSand/adama/app/goods/service/internal/conf"
 	"github.com/littleSand/adama/app/goods/service/internal/data/ent"
 	"github.com/littleSand/adama/pkg/envutil"
+	"github.com/littleSand/adama/pkg/poolutil"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -28,27 +30,21 @@ func NewData(conf *conf.Data, logger log.Logger) (*Data, func(), error) {
 	log := log.NewHelper(log.With(logger, "module", "server-service/data"))
 	databaseSource := envutil.Get("MYSQL_DSN", conf.Database.Source)
 
-	client, err := ent.Open(
-		conf.Database.Driver,
-		databaseSource,
-	)
+	sqlDB, err := sql.Open(conf.Database.Driver, databaseSource)
 	if err != nil {
-		log.Errorf("failed opening connection to sqlite: %v", err)
+		log.Errorf("failed opening connection to mysql: %v", err)
 		return nil, nil, err
 	}
+	poolutil.ConfigureSQLDB(sqlDB, "GOODS")
+	client := ent.NewClient(ent.Driver(entsql.OpenDB(conf.Database.Driver, sqlDB)))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		log.Errorf("failed creating schema resources: %v", err)
 		return nil, nil, err
 	}
 
-	dbSQLDTM, err := sql.Open(conf.Database.Driver, databaseSource)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	d := &Data{
 		db:  client,
-		sql: dbSQLDTM,
+		sql: sqlDB,
 	}
 	if err := ensureStockReservationSchema(d.sql); err != nil {
 		return nil, nil, err

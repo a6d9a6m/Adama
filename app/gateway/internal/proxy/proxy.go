@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/littleSand/adama/pkg/poolutil"
 	"github.com/littleSand/adama/pkg/requestctx"
 )
 
@@ -56,11 +57,7 @@ func NewUpstream(name, rawURL string, timeout time.Duration, logger log.Logger) 
 	reverseProxy := httputil.NewSingleHostReverseProxy(parsedURL)
 	baseDirector := reverseProxy.Director
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.MaxIdleConns = 256
-	transport.MaxIdleConnsPerHost = 128
-	transport.MaxConnsPerHost = 256
-	transport.IdleConnTimeout = 90 * time.Second
+	transport := poolutil.NewHTTPTransport("GATEWAY_PROXY")
 	if timeout > 0 {
 		transport.ResponseHeaderTimeout = timeout
 	}

@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
+	entsql "entgo.io/ent/dialect/sql"
+	dtmcli "github.com/dtm-labs/client/dtmcli"
 	"github.com/go-kratos/etcd/registry"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
@@ -18,6 +21,7 @@ import (
 	"github.com/littleSand/adama/app/order/service/internal/data/kafka"
 	"github.com/littleSand/adama/app/order/service/internal/data/kafka/event"
 	"github.com/littleSand/adama/pkg/envutil"
+	"github.com/littleSand/adama/pkg/poolutil"
 	ggrpc "google.golang.org/grpc"
 )
 
@@ -46,36 +50,31 @@ func NewData(conf *conf.Data, logger log.Logger, rr *registry.Registry) (*Data, 
 	log := log.NewHelper(log.With(logger, "module", "server-service/data"))
 	databaseSource := envutil.Get("MYSQL_DSN", conf.Database.Source)
 
-	client, err := ent.Open(
-		conf.Database.Driver,
-		databaseSource,
-	)
+	msql, err := sql.Open("mysql", databaseSource)
 	if err != nil {
-		log.Errorf("failed opening connection to sqlite: %v", err)
+		log.Errorf("failed opening connection to mysql: %v", err)
 		return nil, nil, err
 	}
+	poolutil.ConfigureSQLDB(msql, "ORDER")
+	client := ent.NewClient(ent.Driver(entsql.OpenDB(conf.Database.Driver, msql)))
 	// Run the auto migration tool.
 	if err := client.Schema.Create(context.Background()); err != nil {
 		log.Errorf("failed creating schema resources: %v", err)
 		return nil, nil, err
 	}
 
-	// mysql
-	msql, err := sql.Open("mysql", databaseSource)
-
-	if err != nil {
-		log.Errorf("failed conn mysql %v", err)
-	}
-
 	// redis
-	rdb := redis.NewClient(&redis.Options{
+	redisOptions := &redis.Options{
 		Addr:         conf.Redis.Addr,
 		Password:     conf.Redis.Password,
 		DB:           int(conf.Redis.Db),
 		WriteTimeout: conf.Redis.WriteTimeout.AsDuration(),
 		ReadTimeout:  conf.Redis.ReadTimeout.AsDuration(),
-	})
+	}
+	poolutil.ConfigureRedisOptions(redisOptions, "ORDER")
+	rdb := redis.NewClient(redisOptions)
 	rdb.AddHook(redisotel.TracingHook{})
+	poolutil.ConfigureRestyClient(dtmcli.GetRestyClient(), "ORDER_DTM", envutil.Duration("ORDER_DTM_HTTP_TIMEOUT", 3*time.Second))
 
 	//gRpc
 	userEndpoint := envutil.Get("USER_GRPC_ENDPOINT", "")

@@ -14,8 +14,14 @@ import (
 	"github.com/littleSand/adama/app/job/service/internal/biz"
 	"github.com/littleSand/adama/pkg/cache"
 	"github.com/littleSand/adama/pkg/envutil"
+	"github.com/littleSand/adama/pkg/poolutil"
 	"github.com/littleSand/adama/pkg/seckill"
 	"gorm.io/gorm/clause"
+)
+
+var taskUpstreamHTTPClient = poolutil.NewHTTPClient(
+	"TASK_UPSTREAM",
+	envutil.Duration("TASK_UPSTREAM_HTTP_TIMEOUT", 3*time.Second),
 )
 
 type orderRepo struct {
@@ -330,7 +336,7 @@ func callGoodsCancel(ctx context.Context, stockToken string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := taskUpstreamHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
