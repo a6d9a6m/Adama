@@ -98,7 +98,7 @@ func (m ordersRepo) PrepareStockReservationTx(ctx context.Context, tx *sql.Tx, s
 	}
 
 	var status string
-	row := tx.QueryRowContext(ctx, "SELECT status FROM adama_stock_reservations WHERE order_id = ? FOR UPDATE", token.OrderID)
+	row := tx.QueryRowContext(ctx, "SELECT status FROM adama_stock_reservations WHERE order_id = ?", token.OrderID)
 	switch scanErr := row.Scan(&status); scanErr {
 	case nil:
 		if status == seckill.StockStatusReserved {
