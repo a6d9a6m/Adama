@@ -24,8 +24,12 @@ const headerSeckillToken = "X-Seckill-Token"
 func (s *OrderService) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*pb.CreateOrderReply, error) {
 	s.log.Infof("CreateOrder request: gid=%d amount=%d", req.Gid, req.Amount)
 
+	userID, err := requiredUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	order := &biz.Order{
-		Uid:    userIDFromContext(ctx, 333),
+		Uid:    userID,
 		Gid:    req.Gid,
 		Amount: req.Amount,
 	}
@@ -46,9 +50,9 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 		amount = 1
 	}
 
-	userID, ok := requestctx.UserID(ctx)
-	if !ok || userID <= 0 {
-		userID = 88
+	userID, err := requiredUserID(ctx)
+	if err != nil {
+		return nil, err
 	}
 	token := requestctx.HeaderValue(ctx, headerSeckillToken)
 	if token == "" {
@@ -114,15 +118,15 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 }
 
 func (s *OrderService) CreateAdamaOrderTry(ctx context.Context, req *pb.CreateAdamaOrderRequest) (*pb.CreateAdamaOrderReply, error) {
-	return &pb.CreateAdamaOrderReply{DtmResult: "SUCCESS"}, nil
+	return nil, errors.New(410, "DEPRECATED_TCC_ENDPOINT", "use /adama/tcc/order/try")
 }
 
 func (s *OrderService) CreateAdamaOrderConfirm(ctx context.Context, req *pb.CreateAdamaOrderRequest) (*pb.CreateAdamaOrderReply, error) {
-	return &pb.CreateAdamaOrderReply{DtmResult: "SUCCESS"}, nil
+	return nil, errors.New(410, "DEPRECATED_TCC_ENDPOINT", "use /adama/tcc/order/confirm")
 }
 
 func (s *OrderService) CreateAdamaOrderCancel(ctx context.Context, req *pb.CreateAdamaOrderRequest) (*pb.CreateAdamaOrderReply, error) {
-	return &pb.CreateAdamaOrderReply{DtmResult: "SUCCESS"}, nil
+	return nil, errors.New(410, "DEPRECATED_TCC_ENDPOINT", "use /adama/tcc/order/cancel")
 }
 
 type AdamaOrderTCCRequest struct {
@@ -238,6 +242,14 @@ func userIDFromContext(ctx context.Context, fallback int64) int64 {
 		return fallback
 	}
 	return userID
+}
+
+func requiredUserID(ctx context.Context) (int64, error) {
+	userID, ok := requestctx.UserID(ctx)
+	if !ok || userID <= 0 {
+		return 0, errors.New(401, "USER_CONTEXT_REQUIRED", "user context required")
+	}
+	return userID, nil
 }
 
 func orderIntQuery(req *stdhttp.Request, key string, defaultValue int) int {

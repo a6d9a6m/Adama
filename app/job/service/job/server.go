@@ -271,7 +271,8 @@ func (s Server) consumeLoop(ctx context.Context, reader *kafka.Reader) {
 				return
 			}
 			s.log.Errorf("kafka fetch failed: topic=%s err=%v", s.topic, err)
-			return
+			time.Sleep(500 * time.Millisecond)
+			continue
 		}
 		h := make(map[string]string)
 		if len(m.Headers) > 0 {
@@ -305,6 +306,8 @@ func (s Server) workerLoop(ctx context.Context, handler event2.Handler, workerID
 			err := handler(ctx, job.payload)
 			if err != nil {
 				s.log.Errorf("message handling failed: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)
+				time.Sleep(200 * time.Millisecond)
+				continue
 			}
 			if err := job.reader.CommitMessages(ctx, job.message); err != nil {
 				s.log.Errorf("failed to commit message: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)

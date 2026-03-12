@@ -45,4 +45,5 @@ func NewHTTPServer(c *conf.Server, s *service.GoodsService, logger log.Logger) *
 func registerGoodsRoutes(srv *http.Server, s *service.GoodsService) {
 	router := srv.Route("/")
 	router.GET("/goods/list", s.ListGoodsHTTP)
+	router.POST("/internal/orders/cancel", s.CancelOrdersInternal)
 }

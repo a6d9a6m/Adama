@@ -330,7 +330,7 @@ func generateDTMGID(server string) (string, error) {
 
 func callGoodsCancel(ctx context.Context, stockToken string) error {
 	payload, _ := json.Marshal(map[string]string{"sn": stockToken})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, envutil.Get("GOODS_CANCEL_URL", "http://127.0.0.1:8003/ordersCancel"), bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, envutil.Get("GOODS_CANCEL_URL", "http://127.0.0.1:8003/internal/orders/cancel"), bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

@@ -86,6 +86,17 @@ func (s *GoodsService) CreateOrdersTccCancel(ctx context.Context, req *pb.Create
 	}, nil
 }
 
+func (s *GoodsService) CancelOrdersInternal(ctx khttp.Context) error {
+	var req pb.CreateOrdersRequest
+	if err := ctx.Bind(&req); err != nil {
+		return err
+	}
+	if err := s.oc.CancelStockReservation(ctx, req.Sn); err != nil {
+		return err
+	}
+	return ctx.JSON(stdhttp.StatusOK, map[string]string{"dtm_result": "SUCCESS"})
+}
+
 func (s *GoodsService) ListGoodsHTTP(ctx khttp.Context) error {
 	page := goodsIntQuery(ctx.Request(), "page", 1)
 	pageSize := goodsIntQuery(ctx.Request(), "page_size", 10)
