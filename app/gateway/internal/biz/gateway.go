@@ -40,10 +40,12 @@ func NewGatewayUsecase(data *data.Data, logger log.Logger) *GatewayUsecase {
 	})
 
 	handler := proxy.NewRateLimitHandler(dispatcher, proxy.RateLimitConfig{
-		GlobalRPS:         envutil.Int("GATEWAY_RATE_LIMIT_RPS", 2000),
-		GlobalBurst:       envutil.Int("GATEWAY_RATE_LIMIT_BURST", 4000),
-		GoodsHotspotRPS:   envutil.Int("GATEWAY_GOODS_HOTSPOT_RPS", 800),
-		GoodsHotspotBurst: envutil.Int("GATEWAY_GOODS_HOTSPOT_BURST", 1600),
+		TokenRPS:            envutil.Int("GATEWAY_TOKEN_RPS", 2000),
+		TokenBurst:          envutil.Int("GATEWAY_TOKEN_BURST", 4000),
+		OrderRPS:            envutil.Int("GATEWAY_ORDER_RPS", 1200),
+		OrderBurst:          envutil.Int("GATEWAY_ORDER_BURST", 2400),
+		UserGoodsOrderRPS:   envutil.Int("GATEWAY_USER_GOODS_ORDER_RPS", 5),
+		UserGoodsOrderBurst: envutil.Int("GATEWAY_USER_GOODS_ORDER_BURST", 10),
 	}, logger)
 
 	return &GatewayUsecase{handler: handler}

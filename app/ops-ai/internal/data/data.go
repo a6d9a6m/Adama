@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sort"
 	"strings"
 	"time"
@@ -279,11 +280,16 @@ func (d *Data) QueryOrderWorkflow(ctx context.Context, query ToolQuery) ([]Workf
 	if limit <= 0 || limit > 10 {
 		limit = 5
 	}
-	rows, err := d.db.QueryContext(ctx, `
+	where, args := workflowWhereClause(query, false)
+	sqlText := `
 		SELECT order_id, user_id, goods_id, amount, status, stock_status, cache_status, sync_status, last_error
-		FROM adama_order_workflows
-		ORDER BY updated_at DESC
-		LIMIT ?`, limit)
+		FROM adama_order_workflows`
+	if where != "" {
+		sqlText += " WHERE " + where
+	}
+	sqlText += " ORDER BY updated_at DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := d.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -308,11 +314,16 @@ func (d *Data) QueryStockReservation(ctx context.Context, query ToolQuery) ([]St
 	if limit <= 0 || limit > 10 {
 		limit = 5
 	}
-	rows, err := d.db.QueryContext(ctx, `
+	where, args := stockReservationWhereClause(query)
+	sqlText := `
 		SELECT order_id, goods_id, amount, status
-		FROM adama_stock_reservations
-		ORDER BY updated_at DESC
-		LIMIT ?`, limit)
+		FROM adama_stock_reservations`
+	if where != "" {
+		sqlText += " WHERE " + where
+	}
+	sqlText += " ORDER BY updated_at DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := d.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -337,12 +348,15 @@ func (d *Data) QueryRecentErrors(ctx context.Context, query ToolQuery) ([]Workfl
 	if limit <= 0 || limit > 10 {
 		limit = 5
 	}
-	rows, err := d.db.QueryContext(ctx, `
+	where, args := workflowWhereClause(query, true)
+	sqlText := `
 		SELECT order_id, user_id, goods_id, amount, status, stock_status, cache_status, sync_status, last_error
 		FROM adama_order_workflows
-		WHERE last_error <> ''
+		WHERE ` + where + `
 		ORDER BY updated_at DESC
-		LIMIT ?`, limit)
+		LIMIT ?`
+	args = append(args, limit)
+	rows, err := d.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -357,6 +371,64 @@ func (d *Data) QueryRecentErrors(ctx context.Context, query ToolQuery) ([]Workfl
 		records = append(records, item)
 	}
 	return records, rows.Err()
+}
+
+func workflowWhereClause(query ToolQuery, includeErrorsOnly bool) (string, []interface{}) {
+	clauses := make([]string, 0, 4)
+	args := make([]interface{}, 0, 4)
+	if includeErrorsOnly {
+		clauses = append(clauses, "last_error <> ''")
+	}
+	if orderID, ok := int64Param(query.Params, "order_id"); ok {
+		clauses = append(clauses, "order_id = ?")
+		args = append(args, orderID)
+	}
+	if goodsID, ok := int64Param(query.Params, "goods_id"); ok {
+		clauses = append(clauses, "goods_id = ?")
+		args = append(args, goodsID)
+	}
+	if userID, ok := int64Param(query.Params, "user_id"); ok {
+		clauses = append(clauses, "user_id = ?")
+		args = append(args, userID)
+	}
+	if status := strings.TrimSpace(query.Params["status"]); status != "" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, status)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func stockReservationWhereClause(query ToolQuery) (string, []interface{}) {
+	clauses := make([]string, 0, 3)
+	args := make([]interface{}, 0, 3)
+	if orderID, ok := int64Param(query.Params, "order_id"); ok {
+		clauses = append(clauses, "order_id = ?")
+		args = append(args, orderID)
+	}
+	if goodsID, ok := int64Param(query.Params, "goods_id"); ok {
+		clauses = append(clauses, "goods_id = ?")
+		args = append(args, goodsID)
+	}
+	if status := strings.TrimSpace(query.Params["status"]); status != "" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, status)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func int64Param(params map[string]string, key string) (int64, bool) {
+	if len(params) == 0 {
+		return 0, false
+	}
+	raw := strings.TrimSpace(params[key])
+	if raw == "" {
+		return 0, false
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
 }
 
 func newOpenAIClient(cfg conf.OpenAI) *OpenAIClient {
