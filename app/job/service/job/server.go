@@ -38,16 +38,21 @@ func init() {
 }
 
 type Server struct {
-	role        string
-	readers     []*kafka.Reader
-	topic       string
-	uo          *service.OrderService
-	rdb         *redis.Client
-	log         *klog.Helper
-	tasks       []scheduledTask
-	workerCount int
-	queueSize   int
-	workQueue   chan consumeJob
+	role           string
+	readers        []*kafka.Reader
+	retryWriter    *kafka.Writer
+	dlqWriter      *kafka.Writer
+	topic          string
+	dlqTopic       string
+	uo             *service.OrderService
+	rdb            *redis.Client
+	log            *klog.Helper
+	tasks          []scheduledTask
+	workerCount    int
+	queueSize      int
+	maxRetry       int
+	publishTimeout time.Duration
+	workQueue      chan consumeJob
 }
 
 type scheduledTask struct {
@@ -67,6 +72,12 @@ type consumeJob struct {
 	message kafka.Message
 	payload *Message
 }
+
+const (
+	headerRetryCount    = "x-retry-count"
+	headerFailedReason  = "x-failed-reason"
+	headerOriginalTopic = "x-original-topic"
+)
 
 func (m *Message) Key() string {
 	return m.key
@@ -108,6 +119,16 @@ func (s Server) Close() error {
 			firstErr = err
 		}
 	}
+	if s.retryWriter != nil {
+		if err := s.retryWriter.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if s.dlqWriter != nil {
+		if err := s.dlqWriter.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
 	return firstErr
 }
 
@@ -117,10 +138,16 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 	topic := "order"
 
 	var readers []*kafka.Reader
+	var retryWriter *kafka.Writer
+	var dlqWriter *kafka.Writer
+	dlqTopic := envutil.Get("TASK_KAFKA_DLQ_TOPIC", topic+"-dlq")
 	if role == "worker" {
 		consumerCount := envutil.Int("TASK_KAFKA_CONSUMERS", 8)
 		if consumerCount <= 0 {
 			consumerCount = 1
+		}
+		if err := ensureKafkaTopic(address, dlqTopic, envutil.Int("TASK_KAFKA_DLQ_PARTITIONS", 1)); err != nil {
+			klog.NewHelper(klog.With(logger, "module", "job/server", "role", role)).Warnf("ensure dlq topic failed: topic=%s err=%v", dlqTopic, err)
 		}
 		readers = make([]*kafka.Reader, 0, consumerCount)
 		for i := 0; i < consumerCount; i++ {
@@ -134,6 +161,8 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 				MaxWait:        100 * time.Millisecond,
 			}))
 		}
+		retryWriter = newKafkaWriter(address, topic)
+		dlqWriter = newKafkaWriter(address, dlqTopic)
 	}
 
 	redisOptions := &redis.Options{
@@ -144,14 +173,25 @@ func NewJOBServer(_ *conf.Server, data *conf.Data, uo *service.OrderService, log
 	poolutil.ConfigureRedisOptions(redisOptions, "TASK")
 	rdb := redis.NewClient(redisOptions)
 	s := &Server{
-		role:        role,
-		readers:     readers,
-		topic:       topic,
-		uo:          uo,
-		rdb:         rdb,
-		log:         klog.NewHelper(klog.With(logger, "module", "job/server", "role", role)),
-		workerCount: envutil.Int("TASK_KAFKA_WORKERS", 12),
-		queueSize:   envutil.Int("TASK_KAFKA_QUEUE_SIZE", 1280),
+		role:           role,
+		readers:        readers,
+		retryWriter:    retryWriter,
+		dlqWriter:      dlqWriter,
+		topic:          topic,
+		dlqTopic:       dlqTopic,
+		uo:             uo,
+		rdb:            rdb,
+		log:            klog.NewHelper(klog.With(logger, "module", "job/server", "role", role)),
+		workerCount:    envutil.Int("TASK_KAFKA_WORKERS", 12),
+		queueSize:      envutil.Int("TASK_KAFKA_QUEUE_SIZE", 1280),
+		maxRetry:       envutil.Int("TASK_KAFKA_MAX_RETRIES", 3),
+		publishTimeout: envutil.Duration("TASK_KAFKA_PUBLISH_TIMEOUT", 3*time.Second),
+	}
+	if s.maxRetry < 0 {
+		s.maxRetry = 0
+	}
+	if s.publishTimeout <= 0 {
+		s.publishTimeout = 3 * time.Second
 	}
 	if s.workerCount <= 0 {
 		s.workerCount = len(readers)
@@ -305,8 +345,29 @@ func (s Server) workerLoop(ctx context.Context, handler event2.Handler, workerID
 		case job := <-s.workQueue:
 			err := handler(ctx, job.payload)
 			if err != nil {
-				s.log.Errorf("message handling failed: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)
-				time.Sleep(200 * time.Millisecond)
+				retryCount := parseRetryCount(job.payload.header)
+				nextRetry := retryCount + 1
+				if nextRetry > s.maxRetry {
+					if dlqErr := s.publishFailure(ctx, s.dlqWriter, job, nextRetry, err); dlqErr != nil {
+						s.log.Errorf("message dlq publish failed: worker=%d topic=%s partition=%d offset=%d retries=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, nextRetry, dlqErr)
+						time.Sleep(200 * time.Millisecond)
+						continue
+					}
+					s.log.Warnf("message moved to dlq: worker=%d topic=%s partition=%d offset=%d retries=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, retryCount, err)
+					if err := job.reader.CommitMessages(ctx, job.message); err != nil {
+						s.log.Errorf("failed to commit dlq message: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)
+					}
+					continue
+				}
+				if retryErr := s.publishFailure(ctx, s.retryWriter, job, nextRetry, err); retryErr != nil {
+					s.log.Errorf("message retry publish failed: worker=%d topic=%s partition=%d offset=%d retries=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, nextRetry, retryErr)
+					time.Sleep(200 * time.Millisecond)
+					continue
+				}
+				s.log.Warnf("message requeued: worker=%d topic=%s partition=%d offset=%d retries=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, nextRetry, err)
+				if err := job.reader.CommitMessages(ctx, job.message); err != nil {
+					s.log.Errorf("failed to commit retried message: worker=%d topic=%s partition=%d offset=%d err=%v", workerID, job.message.Topic, job.message.Partition, job.message.Offset, err)
+				}
 				continue
 			}
 			if err := job.reader.CommitMessages(ctx, job.message); err != nil {
@@ -314,6 +375,104 @@ func (s Server) workerLoop(ctx context.Context, handler event2.Handler, workerID
 			}
 		}
 	}
+}
+
+func (s Server) publishFailure(ctx context.Context, writer *kafka.Writer, job consumeJob, retryCount int, handleErr error) error {
+	if writer == nil {
+		return fmt.Errorf("kafka writer not configured")
+	}
+	headers := make([]kafka.Header, 0, len(job.message.Headers)+3)
+	for _, header := range job.message.Headers {
+		if header.Key == headerRetryCount || header.Key == headerFailedReason || header.Key == headerOriginalTopic {
+			continue
+		}
+		headers = append(headers, header)
+	}
+	headers = append(headers,
+		kafka.Header{Key: headerRetryCount, Value: []byte(strconv.Itoa(retryCount))},
+		kafka.Header{Key: headerFailedReason, Value: []byte(trimFailureReason(handleErr))},
+		kafka.Header{Key: headerOriginalTopic, Value: []byte(job.message.Topic)},
+	)
+	publishCtx, cancel := context.WithTimeout(context.Background(), s.publishTimeout)
+	defer cancel()
+	return writer.WriteMessages(publishCtx, kafka.Message{
+		Key:     job.message.Key,
+		Value:   job.message.Value,
+		Headers: headers,
+	})
+}
+
+func parseRetryCount(headers map[string]string) int {
+	if len(headers) == 0 {
+		return 0
+	}
+	raw := headers[headerRetryCount]
+	if raw == "" {
+		return 0
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func trimFailureReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := err.Error()
+	if len(text) > 200 {
+		return text[:200]
+	}
+	return text
+}
+
+func newKafkaWriter(address []string, topic string) *kafka.Writer {
+	return &kafka.Writer{
+		Topic:        topic,
+		Addr:         kafka.TCP(address...),
+		Balancer:     &kafka.LeastBytes{},
+		BatchTimeout: 5 * time.Millisecond,
+		BatchSize:    1,
+		RequiredAcks: kafka.RequireOne,
+		Async:        false,
+	}
+}
+
+func ensureKafkaTopic(address []string, topic string, partitions int) error {
+	if len(address) == 0 || topic == "" {
+		return nil
+	}
+	if partitions <= 0 {
+		partitions = 1
+	}
+
+	conn, err := kafka.Dial("tcp", address[0])
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	controller, err := conn.Controller()
+	if err != nil {
+		return err
+	}
+	controllerConn, err := kafka.Dial("tcp", fmt.Sprintf("%s:%d", controller.Host, controller.Port))
+	if err != nil {
+		return err
+	}
+	defer controllerConn.Close()
+
+	err = controllerConn.CreateTopics(kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     partitions,
+		ReplicationFactor: 1,
+	})
+	if err != nil && err != kafka.TopicAlreadyExists {
+		return err
+	}
+	return nil
 }
 
 func buildTasksByRole(s *Server) []scheduledTask {
