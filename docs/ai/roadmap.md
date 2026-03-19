@@ -204,7 +204,7 @@
 
 `ops-ai` 不应该只看日志，还要拉运行态证据。当前项目建议接入以下工具：
 
-- Prometheus 查询
+- Prometheus 查询（住：promethus通过docker可以找到，本地有相关image）
   - 请求量、错误率、延迟、`task` 任务指标、Kafka exporter 指标
 
 - MySQL 查询
