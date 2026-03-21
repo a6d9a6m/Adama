@@ -43,3 +43,4 @@ fabric.properties
 .VSCodeCounter/
 benchmarks/tmp/
 benchmarks/wrk/results/raw/
+docs/ai/usage.md
