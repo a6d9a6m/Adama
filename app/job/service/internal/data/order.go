@@ -16,6 +16,7 @@ import (
 	"github.com/littleSand/adama/pkg/envutil"
 	"github.com/littleSand/adama/pkg/poolutil"
 	"github.com/littleSand/adama/pkg/seckill"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -65,7 +66,13 @@ func (AdamaOrderWorkflow) TableName() string {
 func (o *orderRepo) CreateOrder(ctx context.Context, oo *biz.AdamaOrder) (*biz.AdamaOrder, error) {
 	workflow, err := o.loadWorkflow(ctx, oo.OrderId)
 	if err != nil {
-		return nil, err
+		if err := o.ensureWorkflow(ctx, oo); err != nil {
+			return nil, err
+		}
+		workflow, err = o.loadWorkflow(ctx, oo.OrderId)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if workflow.Status == seckill.OrderStatusCancelled || workflow.Status == seckill.OrderStatusTimeoutClosed {
 		return oo, nil
@@ -273,11 +280,48 @@ func NewOrderRepo(data *Data, logger log.Logger) biz.OrderQueueRepo {
 	}
 }
 
+func (o *orderRepo) ensureWorkflow(ctx context.Context, oo *biz.AdamaOrder) error {
+	now := time.Now()
+	workflow := AdamaOrderWorkflow{
+		OrderID:     oo.OrderId,
+		UserID:      oo.UserId,
+		GoodsID:     oo.GoodsId,
+		Amount:      oo.Amount,
+		StockToken:  oo.StockToken,
+		Status:      seckill.OrderStatusPreparing,
+		StockStatus: seckill.StockStatusReserving,
+		CacheStatus: seckill.CacheStatusReserved,
+		SyncStatus:  seckill.SyncStatusPending,
+		ExpireAt:    oo.ExpireAt,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	return o.data.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "order_id"}},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"user_id":      oo.UserId,
+				"goods_id":     oo.GoodsId,
+				"amount":       oo.Amount,
+				"stock_token":  oo.StockToken,
+				"expire_at":    oo.ExpireAt,
+				"updated_at":   now,
+				"last_error":   "",
+				"sync_status":  seckill.SyncStatusPending,
+				"cache_status": seckill.CacheStatusReserved,
+			}),
+		}).
+		Create(&workflow).Error
+}
+
 func (o *orderRepo) loadWorkflow(ctx context.Context, orderID int64) (*AdamaOrderWorkflow, error) {
 	var workflow AdamaOrderWorkflow
 	if err := o.data.db.WithContext(ctx).
 		Where("order_id = ?", orderID).
 		First(&workflow).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, err
+		}
 		return nil, err
 	}
 	return &workflow, nil

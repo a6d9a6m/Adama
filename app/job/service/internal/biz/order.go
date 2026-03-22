@@ -20,6 +20,7 @@ type AdamaOrder struct {
 	GoodsId    int64
 	Amount     int64
 	StockToken string
+	ExpireAt   time.Time
 }
 
 type OrderQueueUsecase struct {

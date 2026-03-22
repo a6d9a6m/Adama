@@ -93,12 +93,6 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 		Amount:  order.Amount,
 	}.Encode()
 
-	if err := s.so.Prepare(ctx, order); err != nil {
-		s.log.Error(err)
-		_ = s.so.Cancel(ctx, order)
-		return nil, err
-	}
-
 	dispatchErr := s.so.SendKafka(ctx, order)
 	if dispatchErr != nil {
 		s.log.Warnf("adama order queue dispatch failed: order=%d err=%v", order.OrderId, dispatchErr)
@@ -107,15 +101,7 @@ func (s *OrderService) CreateAdamaOrder(ctx context.Context, req *pb.CreateAdama
 		if cancelErr := s.so.Cancel(compensateCtx, order); cancelErr != nil {
 			s.log.Errorf("cancel queued adama order failed: order=%d err=%v", order.OrderId, cancelErr)
 		}
-		if markErr := s.so.MarkSyncResult(compensateCtx, order.OrderId, dispatchErr); markErr != nil {
-			s.log.Error(markErr)
-		}
 		return nil, dispatchErr
-	}
-	markCtx, cancelMark := context.WithTimeout(context.Background(), envutil.Duration("ORDER_MARK_SYNC_TIMEOUT", 2*time.Second))
-	defer cancelMark()
-	if markErr := s.so.MarkSyncResult(markCtx, order.OrderId, nil); markErr != nil {
-		s.log.Error(markErr)
 	}
 
 	return &pb.CreateAdamaOrderReply{DtmResult: "QUEUED"}, nil

@@ -232,6 +232,10 @@ func (s Server) Start(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			expireAt, err := time.Parse(time.RFC3339, msg["expire_at"])
+			if err != nil {
+				return err
+			}
 
 			in := &biz.AdamaOrder{
 				OrderId:    oid,
@@ -239,6 +243,7 @@ func (s Server) Start(ctx context.Context) error {
 				GoodsId:    gid,
 				Amount:     amount,
 				StockToken: msg["stock_token"],
+				ExpireAt:   expireAt,
 			}
 			return s.uo.Create(ctx, in)
 		}); err != nil {
