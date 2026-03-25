@@ -30,6 +30,7 @@ services:
   mysql-replica:
     image: ${MYSQL_IMAGE:-mysql:8.0}
     container_name: adama-mysql-replica
+    restart: unless-stopped
     command:
       - --default-authentication-plugin=mysql_native_password
       - --server-id=2
@@ -49,6 +50,7 @@ services:
   proxysql:
     image: proxysql/proxysql:2.6.2
     container_name: adama-proxysql
+    restart: unless-stopped
     depends_on:
       - mysql
       - mysql-replica
