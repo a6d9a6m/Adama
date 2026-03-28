@@ -135,3 +135,52 @@
 
 1. 日志 id 使用 uuid 太长了
 2. 秒杀异步消费吞吐仍有提升空间
+
+## 文档专项任务
+
+> 说明：这一组任务只处理文档资产，按顺序推进，完成一项再开下一项。
+
+### P0 进行中
+
+- [x] T1 文档入口整理
+  输出：更新 `README.md`、`docs/README.md`、`docs/plans/documentation-plan.md`
+
+- [x] T2 系统总览文档
+  输出：新增系统总览文档，说明服务边界、调用关系、目录结构与阅读顺序
+
+- [x] T3 秒杀主链路文档
+  输出：新增或补充主链路文档，覆盖 token、预扣库存、排队、落库、补偿
+
+- [x] T4 订单工作流文档
+  输出：新增工作流文档，说明 `preparing -> pending_payment -> synced/cancelled/timeout_closed` 等状态变化
+
+- [x] T5 gateway 文档
+  输出：补暴露接口范围、拦截路径、限流策略、上下文透传
+
+### P1 待执行
+
+- [ ] T6 task 服务与补偿任务文档
+  输出：说明 worker、timeout、scheduler 三类角色与任务职责
+
+- [ ] T7 Kafka 消息语义文档
+  输出：说明生产、消费、重试、DLQ、提交时机与失败处理边界
+
+- [ ] T8 事务与一致性文档补强
+  输出：补 Redis 预留、数据库状态、TCC barrier、最终一致性关系
+
+- [ ] T9 本地运行文档
+  输出：补本地启动、依赖服务、核心环境变量、常用联调命令
+
+- [ ] T10 观测与压测文档
+  输出：补 Prometheus、Grafana、wrk、结果记录和基线入口
+
+### P2 待执行
+
+- [ ] T11 FAQ 与排障清单整理
+  输出：按常见故障场景重构 `FQA.md` 目录
+
+- [ ] T12 AI 测试矩阵模板
+  输出：在 `docs/ai/testing/` 下补测试矩阵模板和回归记录模板
+
+- [ ] T13 AI 评审与 RCA 模板
+  输出：在 `docs/ai/reviews/`、`docs/ai/knowledge/` 下补标准模板

@@ -24,6 +24,12 @@
 - 事务探索：`DTM / TCC`
 - 压测工具：`wrk`
 
+## 文档入口
+
+- 文档索引：[docs/README.md](/d:/CCY/Code/Go/adama/docs/README.md)
+- 文档专项计划：[docs/plans/documentation-plan.md](/d:/CCY/Code/Go/adama/docs/plans/documentation-plan.md)
+- 当前执行清单：[scheduled.md](/d:/CCY/Code/Go/adama/scheduled.md)
+
 ## 设计思路
 
 ### 1. 为什么使用 Redis

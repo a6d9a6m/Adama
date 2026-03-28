@@ -18,6 +18,21 @@
 - [plans/benchmark-plan.md](/d:/CCY/Code/Go/adama/docs/plans/benchmark-plan.md)
   benchmark / wrk 测试套件改造规划
 
+- [plans/documentation-plan.md](/d:/CCY/Code/Go/adama/docs/plans/documentation-plan.md)
+  文档专项完善计划与执行顺序
+
+- [architecture/system-overview.md](/d:/CCY/Code/Go/adama/docs/architecture/system-overview.md)
+  系统总览、服务边界、调用关系与阅读顺序
+
+- [architecture/seckill-mainline.md](/d:/CCY/Code/Go/adama/docs/architecture/seckill-mainline.md)
+  当前秒杀主链路的同步、异步、TCC 与补偿流程
+
+- [architecture/order-workflow.md](/d:/CCY/Code/Go/adama/docs/architecture/order-workflow.md)
+  订单工作流状态机、字段语义与收敛路径
+
+- [architecture/gateway.md](/d:/CCY/Code/Go/adama/docs/architecture/gateway.md)
+  gateway 的暴露面控制、限流、上下文透传与 Nginx 分工
+
 - [architecture/storage/mysql-structure.md](/d:/CCY/Code/Go/adama/docs/architecture/storage/mysql-structure.md)
   MySQL 结构设计
 
