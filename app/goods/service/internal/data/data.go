@@ -72,6 +72,9 @@ func ensureStockReservationSchema(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("ensure stock reservation schema: %w", err)
 	}
+	if err := ensureIndex(db, "adama_goods", "uk_goods_id", "ALTER TABLE adama_goods ADD UNIQUE KEY uk_goods_id (goods_id)"); err != nil {
+		return fmt.Errorf("ensure adama goods index: %w", err)
+	}
 	return nil
 }
 
@@ -93,4 +96,21 @@ func ensureDTMBarrierSchema(db *sql.DB) error {
 		return fmt.Errorf("ensure dtm barrier schema: %w", err)
 	}
 	return nil
+}
+
+func ensureIndex(db *sql.DB, tableName, indexName, ddl string) error {
+	var count int
+	if err := db.QueryRow(
+		`SELECT COUNT(1)
+		FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+		tableName, indexName,
+	).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := db.Exec(ddl)
+	return err
 }

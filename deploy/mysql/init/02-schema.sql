@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS adama_goods (
   stock_count BIGINT NOT NULL,
   start_date DATETIME NOT NULL,
   end_date DATETIME NOT NULL,
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_goods_id (goods_id)
 );
 
 USE `order`;
@@ -95,7 +96,8 @@ CREATE TABLE IF NOT EXISTS adama_goods (
   stock_count BIGINT NOT NULL,
   start_date DATETIME NOT NULL,
   end_date DATETIME NOT NULL,
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_goods_id (goods_id)
 );
 
 CREATE TABLE IF NOT EXISTS adama_orders (
@@ -103,7 +105,9 @@ CREATE TABLE IF NOT EXISTS adama_orders (
   user_id BIGINT NOT NULL,
   order_id BIGINT NOT NULL,
   goods_id BIGINT NOT NULL,
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_order_id (order_id),
+  KEY idx_user_goods (user_id, goods_id)
 );
 
 CREATE TABLE IF NOT EXISTS adama_order_workflows (
@@ -124,7 +128,10 @@ CREATE TABLE IF NOT EXISTS adama_order_workflows (
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (order_id),
   KEY idx_status_expire (status, expire_at),
-  KEY idx_sync_status (sync_status, updated_at)
+  KEY idx_sync_status (sync_status, updated_at),
+  KEY idx_sync_status_status_updated (sync_status, status, updated_at),
+  KEY idx_status_stock_updated (status, stock_status, updated_at),
+  KEY idx_status_cache_updated (status, cache_status, updated_at)
 );
 
 USE dtm_barrier;

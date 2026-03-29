@@ -133,7 +133,7 @@ func (o *orderRepo) CreateOrder(ctx context.Context, oo *biz.AdamaOrder) (*biz.A
 func (o *orderRepo) RepairPendingOrders(ctx context.Context, limit int) (int, error) {
 	var workflows []AdamaOrderWorkflow
 	if err := o.data.db.WithContext(ctx).
-		Where("sync_status <> ? AND status IN ?", seckill.SyncStatusSynced, []string{seckill.OrderStatusPreparing, seckill.OrderStatusPendingPay}).
+		Where("sync_status = ? AND status IN ?", seckill.SyncStatusPending, []string{seckill.OrderStatusPreparing, seckill.OrderStatusPendingPay}).
 		Order("updated_at ASC").
 		Limit(limit).
 		Find(&workflows).Error; err != nil {
@@ -163,13 +163,24 @@ func (o *orderRepo) RepairPendingOrders(ctx context.Context, limit int) (int, er
 }
 
 func (o *orderRepo) CloseExpiredOrders(ctx context.Context, now time.Time, limit int) (int, error) {
-	var workflows []AdamaOrderWorkflow
+	workflows := make([]AdamaOrderWorkflow, 0, limit)
 	if err := o.data.db.WithContext(ctx).
-		Where("(status = ? AND expire_at <= ?) OR (status = ? AND stock_status <> ?)", seckill.OrderStatusPendingPay, now, seckill.OrderStatusTimeoutClosed, seckill.StockStatusReleased).
+		Where("status = ? AND expire_at <= ?", seckill.OrderStatusPendingPay, now).
 		Order("expire_at ASC").
 		Limit(limit).
 		Find(&workflows).Error; err != nil {
 		return 0, err
+	}
+	if len(workflows) < limit {
+		extra := make([]AdamaOrderWorkflow, 0, limit-len(workflows))
+		if err := o.data.db.WithContext(ctx).
+			Where("status = ? AND stock_status IN ?", seckill.OrderStatusTimeoutClosed, []string{seckill.StockStatusReserving, seckill.StockStatusReserved}).
+			Order("updated_at ASC").
+			Limit(limit - len(workflows)).
+			Find(&extra).Error; err != nil {
+			return 0, err
+		}
+		workflows = append(workflows, extra...)
 	}
 
 	closed := 0
@@ -184,13 +195,33 @@ func (o *orderRepo) CloseExpiredOrders(ctx context.Context, now time.Time, limit
 }
 
 func (o *orderRepo) CheckStockConsistency(ctx context.Context, limit int) (int, error) {
-	var workflows []AdamaOrderWorkflow
+	workflows := make([]AdamaOrderWorkflow, 0, limit)
 	if err := o.data.db.WithContext(ctx).
-		Where("status = ? AND (stock_status <> ? OR cache_status <> ?)", seckill.OrderStatusPendingPay, seckill.StockStatusReserved, seckill.CacheStatusReserved).
+		Where("status = ? AND stock_status IN ?", seckill.OrderStatusPendingPay, []string{seckill.StockStatusReserving, seckill.StockStatusReleased}).
 		Order("updated_at ASC").
 		Limit(limit).
 		Find(&workflows).Error; err != nil {
 		return 0, err
+	}
+	if len(workflows) < limit {
+		extra := make([]AdamaOrderWorkflow, 0, limit-len(workflows))
+		if err := o.data.db.WithContext(ctx).
+			Where("status = ? AND cache_status = ?", seckill.OrderStatusPendingPay, seckill.CacheStatusReleased).
+			Order("updated_at ASC").
+			Limit(limit - len(workflows)).
+			Find(&extra).Error; err != nil {
+			return 0, err
+		}
+		seen := make(map[int64]struct{}, len(workflows))
+		for _, workflow := range workflows {
+			seen[workflow.OrderID] = struct{}{}
+		}
+		for _, workflow := range extra {
+			if _, ok := seen[workflow.OrderID]; ok {
+				continue
+			}
+			workflows = append(workflows, workflow)
+		}
 	}
 	return len(workflows), nil
 }

@@ -142,13 +142,32 @@ func ensureOrderWorkflowSchema(db *sql.DB) error {
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			INDEX idx_status_expire(status, expire_at),
-			INDEX idx_sync_status(sync_status, updated_at)
+			INDEX idx_sync_status(sync_status, updated_at),
+			INDEX idx_sync_status_status_updated(sync_status, status, updated_at),
+			INDEX idx_status_stock_updated(status, stock_status, updated_at),
+			INDEX idx_status_cache_updated(status, cache_status, updated_at)
 		)`,
 	}
 
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("ensure order workflow schema: %w", err)
+		}
+	}
+	indexes := []struct {
+		table string
+		name  string
+		ddl   string
+	}{
+		{"adama_goods", "uk_goods_id", "ALTER TABLE adama_goods ADD UNIQUE KEY uk_goods_id (goods_id)"},
+		{"adama_orders", "idx_user_goods", "ALTER TABLE adama_orders ADD KEY idx_user_goods (user_id, goods_id)"},
+		{"adama_order_workflows", "idx_sync_status_status_updated", "ALTER TABLE adama_order_workflows ADD KEY idx_sync_status_status_updated (sync_status, status, updated_at)"},
+		{"adama_order_workflows", "idx_status_stock_updated", "ALTER TABLE adama_order_workflows ADD KEY idx_status_stock_updated (status, stock_status, updated_at)"},
+		{"adama_order_workflows", "idx_status_cache_updated", "ALTER TABLE adama_order_workflows ADD KEY idx_status_cache_updated (status, cache_status, updated_at)"},
+	}
+	for _, item := range indexes {
+		if err := ensureIndex(db, item.table, item.name, item.ddl); err != nil {
+			return fmt.Errorf("ensure %s.%s: %w", item.table, item.name, err)
 		}
 	}
 	return nil
@@ -172,4 +191,21 @@ func ensureDTMBarrierSchema(db *sql.DB) error {
 		return fmt.Errorf("ensure dtm barrier schema: %w", err)
 	}
 	return nil
+}
+
+func ensureIndex(db *sql.DB, tableName, indexName, ddl string) error {
+	var count int
+	if err := db.QueryRow(
+		`SELECT COUNT(1)
+		FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+		tableName, indexName,
+	).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := db.Exec(ddl)
+	return err
 }

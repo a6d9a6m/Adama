@@ -300,3 +300,54 @@ Transfer/sec:     15.63KB
 ### 结论
 
 这个问题当前更像是“反向代理层连接复用、日志开销和连接池配置过保守”，而不是 `goods` 业务逻辑本身已经达到瓶颈。经过这轮调优后，`nginx -> gateway` 的吞吐差距已经明显收敛，但 `nginx` 在 `c128` 以上仍然会快速恶化，说明当前更稳妥的实用并发区间仍应控制在 `c64` 左右。
+
+## 8. 数据库查询和表定义还能怎么继续提效
+
+### 现象
+
+在把入口限流、死锁和连接数问题收住后，瓶颈已经继续收敛到：
+
+- `task-worker -> DTM TCC -> goods/order`
+- `adama_order_workflows` 的状态扫描与多次更新
+- `goods.adama_goods` 的热点库存更新
+
+这说明后续优化不能只盯着 worker 数和连接池，数据库定义和查询路径本身也要继续收紧。
+
+### 根因分析
+
+- `adama_goods` 原来没有 `goods_id` 索引，但库存扣减和回补都是按 `goods_id` 更新。
+- `adama_order_workflows` 原来只有 `(status, expire_at)` 和 `(sync_status, updated_at)` 两组基础索引，和 repair / timeout / consistency check 的真实条件并不完全匹配。
+- 定时任务里还存在 `<>`、`OR` 这类不利于索引命中的条件，导致即使有索引也吃不满。
+
+### 处理
+
+这轮继续补了两类优化：
+
+- 表定义优化
+  - 给 `goods.adama_goods` 和 `order.adama_goods` 补 `goods_id` 唯一索引
+  - 给 `order.adama_orders` 补 `idx_user_goods (user_id, goods_id)`
+  - 给 `order.adama_order_workflows` 补：
+    - `idx_sync_status_status_updated`
+    - `idx_status_stock_updated`
+    - `idx_status_cache_updated`
+
+- 查询改写
+  - repair 从 `sync_status <> synced` 改成 `sync_status = pending`
+  - timeout 从单条 `OR` 查询拆成两段：
+    - `pending_payment + expire_at`
+    - `timeout_closed + stock_status IN (...)`
+  - consistency check 拆成两段：
+    - `stock_status IN (...)`
+    - `cache_status = released`
+
+### 结论
+
+这类优化不会单独把系统吞吐翻倍，但能把数据库从“隐性拖慢点”变成更可控的成本项。
+
+当前判断是：
+
+- 数据库层还有继续优化空间
+- 但它属于异步 TCC 主链路上的第二层提效
+- 真正的主瓶颈仍然是异步事务链路的整体消化速度，而不是某一条库存 SQL
+
+也就是说，数据库索引和查询形态优化值得持续做，而且已经开始产生收益，但它不能替代对异步 TCC 主链路继续收缩。
