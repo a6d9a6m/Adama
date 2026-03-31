@@ -307,7 +307,6 @@ timeout_closed
 
 ## 相关文档
 
-- [system-overview.md](/d:/CCY/Code/Go/adama/docs/architecture/system-overview.md)
-- [seckill-mainline.md](/d:/CCY/Code/Go/adama/docs/architecture/seckill-mainline.md)
-- [mysql-structure.md](/d:/CCY/Code/Go/adama/docs/architecture/storage/mysql-structure.md)
-
+- [system-overview.md](system-overview.md)
+- [seckill-mainline.md](seckill-mainline.md)
+- [reference/mysql-structure.md](../reference/mysql-structure.md)

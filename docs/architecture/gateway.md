@@ -264,7 +264,6 @@ Client -> Nginx -> Gateway -> User/Goods/Order
 
 ## 相关文档
 
-- [system-overview.md](/d:/CCY/Code/Go/adama/docs/architecture/system-overview.md)
-- [seckill-mainline.md](/d:/CCY/Code/Go/adama/docs/architecture/seckill-mainline.md)
-- [README-compose.md](/d:/CCY/Code/Go/adama/deploy/README-compose.md)
-
+- [system-overview.md](system-overview.md)
+- [seckill-mainline.md](seckill-mainline.md)
+- [deploy/README-compose.md](../../deploy/README-compose.md)

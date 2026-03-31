@@ -261,8 +261,7 @@ task-timeout / task-scheduler
 
 ## 相关文档
 
-- [system-overview.md](/d:/CCY/Code/Go/adama/docs/architecture/system-overview.md)
-- [order-workflow.md](/d:/CCY/Code/Go/adama/docs/architecture/order-workflow.md)
-- [redis-first-tcc.md](/d:/CCY/Code/Go/adama/docs/architecture/transactions/redis-first-tcc.md)
-- [distributed-transaction.md](/d:/CCY/Code/Go/adama/docs/architecture/transactions/distributed-transaction.md)
-
+- [system-overview.md](system-overview.md)
+- [order-workflow.md](order-workflow.md)
+- [transactions/redis-first-tcc.md](transactions/redis-first-tcc.md)
+- [transactions/distributed-transaction.md](transactions/distributed-transaction.md)

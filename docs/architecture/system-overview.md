@@ -167,12 +167,12 @@ task-scheduler
 第一次接触仓库，建议按下面顺序阅读：
 
 1. 当前文档：建立系统边界和模块感知
-2. [redis-first-tcc.md](/d:/CCY/Code/Go/adama/docs/architecture/transactions/redis-first-tcc.md)：理解秒杀主链路的设计取舍
-3. [distributed-transaction.md](/d:/CCY/Code/Go/adama/docs/architecture/transactions/distributed-transaction.md)：理解 DTM / TCC 背景
-4. [mysql-structure.md](/d:/CCY/Code/Go/adama/docs/architecture/storage/mysql-structure.md)：理解持久化对象
-5. [redis-key.md](/d:/CCY/Code/Go/adama/docs/architecture/storage/redis-key.md)：理解缓存与幂等 key
-6. [kafka.md](/d:/CCY/Code/Go/adama/docs/architecture/messaging/kafka.md)：理解异步消息设计
-7. [README-compose.md](/d:/CCY/Code/Go/adama/deploy/README-compose.md)：理解本地运行和依赖编排
+2. [transactions/redis-first-tcc.md](transactions/redis-first-tcc.md)：理解秒杀主链路的设计取舍
+3. [transactions/distributed-transaction.md](transactions/distributed-transaction.md)：理解 DTM / TCC 背景
+4. [reference/mysql-structure.md](../reference/mysql-structure.md)：理解持久化对象
+5. [reference/redis-key.md](../reference/redis-key.md)：理解缓存与幂等 key
+6. [reference/kafka.md](../reference/kafka.md)：理解异步消息设计
+7. [deploy/README-compose.md](../../deploy/README-compose.md)：理解本地运行和依赖编排
 
 ## 后续文档落点
 
@@ -185,4 +185,3 @@ task-scheduler
 - 观测与压测：重点写指标、看板和基线
 
 如果某个问题已经需要落到 SQL、Redis key、TCC 分支或补偿细节，说明应该进入专题文档，而不是继续堆在总览里。
-

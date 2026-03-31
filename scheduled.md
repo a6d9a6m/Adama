@@ -143,7 +143,7 @@
 ### P0 进行中
 
 - [x] T1 文档入口整理
-  输出：更新 `README.md`、`docs/README.md`、`docs/plans/documentation-plan.md`
+  输出：更新 `README.md`、`docs/README.md`
 
 - [x] T2 系统总览文档
   输出：新增系统总览文档，说明服务边界、调用关系、目录结构与阅读顺序
@@ -179,8 +179,8 @@
 - [ ] T11 FAQ 与排障清单整理
   输出：按常见故障场景重构 `FQA.md` 目录
 
-- [ ] T12 AI 测试矩阵模板
-  输出：在 `docs/ai/testing/` 下补测试矩阵模板和回归记录模板
+- [ ] T12 测试矩阵模板
+  输出：补本地测试矩阵模板和回归记录模板，不纳入 git
 
-- [ ] T13 AI 评审与 RCA 模板
-  输出：在 `docs/ai/reviews/`、`docs/ai/knowledge/` 下补标准模板
+- [ ] T13 评审与 RCA 模板
+  输出：补本地评审和 RCA 模板，不纳入 git

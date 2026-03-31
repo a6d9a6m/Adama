@@ -39,8 +39,10 @@ fabric.properties
 
 # others
 /plan.md
+docs/plans/
+docs/ai/
+.local/
 /test_plan.md
 .VSCodeCounter/
 benchmarks/tmp/
 benchmarks/wrk/results/raw/
-docs/ai/usage.md

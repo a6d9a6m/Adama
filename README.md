@@ -27,7 +27,6 @@
 ## 文档入口
 
 - 文档索引：[docs/README.md](docs/README.md)
-- 文档专项计划：[docs/plans/documentation-plan.md](docs/plans/documentation-plan.md)
 - 当前执行清单：[scheduled.md](scheduled.md)
 
 ## 设计思路
